@@ -1,0 +1,46 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: server",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\FlyKanBan\\manage.py",
+            "args": ["runserver"],
+            //"console": "integratedTerminal",
+            "django": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Python: shell",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\FlyKanBan\\manage.py",
+            "args": ["shell"],
+            //"console": "integratedTerminal",
+            "django": true,
+            "justMyCode": false
+        },
+        {
+            "name": "Python: file",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            //"console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: mm",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\FlyKanBan\\manage.py",
+            "args": ["makemigrations"],
+            "django": true,
+            //"console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

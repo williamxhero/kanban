@@ -1,0 +1,4 @@
+django
+mysqlclient
+django-apscheduler
+calc_work_hours
