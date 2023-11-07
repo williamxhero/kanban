@@ -1,15 +1,14 @@
 from fkb.models import *
-from fkb.controls.proc_table import ProcTable
+from fkb.tools.proc_table import ProcTable
 
 class ProcUser(ProcTable):
     
-    KEYS = ['act']
     DB_TYPE = 'User'
     TABLE_NAME = 'zt_user'
 
     KEY_MAP = {
         'account':'act',
-        'truename':'nme',
+        'truename':'nam',
         'realname':'nck',
         'gender':'gdr',
         'role':'grp',

@@ -2,7 +2,7 @@
 from work_hours import WorkHours
 
 from fkb.models import *
-from fkb.controls.zentao.proc_table import ProcTable
+from fkb.tools.proc_table import ProcTable
 
 class ProcTask(ProcTable):
     
@@ -43,7 +43,7 @@ class ProcTask(ProcTable):
         'lastPausedDate':'_psd_srt_time',
         'pausedHr':'_psd_dur', # hour to timespan
 
-        # == rel: ==
+        # rel: # 只处理 不同类父 和 同类子
         'parent':'_parent',
         'project':'_itor',
         }

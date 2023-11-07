@@ -112,9 +112,9 @@ class KC(models.ForeignKey):
 		kwargs['on_delete'] = models.CASCADE
 		super().__init__(**kwargs)
 
-class FStatus(models.CharField):
+class FStt(models.CharField):
 	'''
-	F: Field
+	F: Field  Status
 	'''
 	def __init__(self, verbose_name:str, choices:list[tuple[str,str]], default:str, 
 			  **kwargs:Any):
@@ -123,6 +123,18 @@ class FStatus(models.CharField):
 		kwargs['choices']= choices
 		kwargs['default'] = default
 		super().__init__(**kwargs)
+
+class FSttN(models.CharField):
+	'''
+	F: Field  Status
+	N: Nullable
+	'''
+	def __init__(self, verbose_name:str, choices:list[tuple[str,str]],
+			  **kwargs:Any):
+		kwargs['max_length']=3
+		kwargs['verbose_name'] = verbose_name
+		kwargs['choices']= choices
+		nullable(super(), **kwargs)
 
 class KUserND(models.ForeignKey):
 	''' 

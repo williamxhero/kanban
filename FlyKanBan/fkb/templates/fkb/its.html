@@ -1,0 +1,85 @@
+{% spaceless %}{% load static %}{% load vue %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0">
+<title></title>
+<link rel="stylesheet" href="{% static 'fkb/element-plus.css'%}">
+<style>
+  .el-breadcrumb{display: inline-block;}
+</style>
+</head>
+
+<body><div id="app">
+
+  <div>
+    <el-table
+      :data="pds_data"
+      style="width: 100%; margin-bottom: 20px"
+      row-key="id"
+      border
+      default-expand-all
+    >
+      <el-table-column prop="name" label="产品" width="300px">
+        <template #default="scope">
+          <el-breadcrumb separator="/" v-if="scope.row.is_pl">
+          <el-breadcrumb-item><a :href="scope.row.pd_link">
+            {% vue 'scope.row.pd_name' %}</a></el-breadcrumb-item>
+            <el-breadcrumb-item>
+            <a :href="scope.row.link" style="">
+            {% vue 'scope.row.name' %}</a></el-breadcrumb-item>
+            </el-breadcrumb>
+            <el-button v-if="scope.row.is_it" type="success" plain tag="a" style="text-decoration:none"
+            :href="scope.row.link">{% vue 'scope.row.name' %}
+            </el-button>
+       </template>
+      </el-table-column>
+      <el-table-column prop="stt" label="状态" sortable></el-table-column>
+    </el-table>
+  </div>
+
+</div></body>
+<script src="{% static 'fkb/vue.global.min.js' %}"></script>
+<script src="{% static 'fkb/element-plus.js' %}"></script>
+
+<script>
+    const App = {
+        data() {
+            return {
+                ongoing_type: "{% if ongoing == 'ongoing' %}{{ '进行中' }}{% else %}{{ '所有' }}{% endif %}",
+                pds_data : [
+                {% if cur_pl.has_Its|length > 0 %}
+                {id:"Pl#{{cur_pl.uid}}",name:"{{ cur_pl.ttl }}", link:"{% url 'its' cur_pl.uid ongoing %}", is_pl:true, is_it:false,
+                  pd_link:"{% url 'pls' cur_pl.of_Pd.uid ongoing %}", pd_name:"{{ cur_pl.of_Pd.ttl }}",
+                children:[
+                {% for it in cur_pl.has_Its%}
+                {id:"It#{{it.uid}}",name:"{{ it.ttl }}", link:"{% url 'it' it.uid %}", is_pl:false, is_it:true,}
+                {% endfor %}
+                ]},
+                {% endif %},
+                
+                {% for pl in pls %}{% if pl != cur_pl and pl.has_Its|length > 0 %}
+                {id:"Pl#{{pl.uid}}",name:"{{ pl.ttl }}", link:"{% url 'its' pl.uid ongoing %}", is_pl:true, is_it:false,
+                pd_link:"{% url 'pls' pl.of_Pd.uid ongoing %}", pd_name:"{{ pl.of_Pd.ttl }}",
+                children:[
+                {% for it in pl.has_Its%}
+                {id:"It#{{it.uid}}",name:"{{ it.ttl }}", link:"{% url 'it' it.uid %}", is_pl:false, is_it:true,},
+                {% endfor %}
+                ]},
+                {% endif %}{% endfor %}
+                ]
+            }
+        },
+        methods:{},
+        mounted(){
+            document.title = this.ongoing_type + "产品计划"
+        }
+    }
+    const app = Vue.createApp(App);
+    app.use(ElementPlus);
+    app.mount('#app')
+</script>
+
+
+</html>
+{% endspaceless %}

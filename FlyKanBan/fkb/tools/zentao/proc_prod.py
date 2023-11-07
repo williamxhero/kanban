@@ -1,16 +1,16 @@
 from fkb.models import *
-from fkb.controls.proc_table import ProcChild
-from fkb.controls.zentao.proc_mixin import ProcPriMixin
+from fkb.tools.proc_table import ProcChild
+from fkb.tools.zentao.proc_mixin import ProcMixin
 
 
 
-class ProcProd(ProcChild, ProcPriMixin):
+class ProcProd(ProcChild, ProcMixin):
     
     KEY_MAP = {
         'id':'uid',
 
-        'name':'ttl',
-        'code':'sht',
+        'name':'_ttl',
+        'code':'_sht',
         'createdDate':'crt_tim',
         'order':'rdr',
 
@@ -19,8 +19,8 @@ class ProcProd(ProcChild, ProcPriMixin):
         'pri':'_pri',
         'PO':'_rsp_usr',
 
-        # rel:
-        'products':'_pds_has',
+        # rel: # 只处理 不同类父（没有） 和 同类子
+        'products':'_has_Pd',
         }
     
     STT_KV = {
@@ -33,6 +33,7 @@ class ProcProd(ProcChild, ProcPriMixin):
 
     def change_dict(self, dct):
         self._chg_pri(dct)
+        self._chg_ttl_sht(dct)
         self._chg_stt(dct, self.STT_KV)
         self._chg_usr(dct, 'rsp_usr')
-        self._chg_children(dct, '_pds_has')
+        self._chg_rlt_has(dct, '_has_Pd')

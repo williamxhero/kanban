@@ -1,0 +1,50 @@
+{% spaceless %}{% load static %}{% load vue %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0">
+<title></title>
+<link rel="stylesheet" href="{% static 'fkb/element-plus.css'%}">
+</head>
+
+<body><div id="app">
+
+    <el-table :data="pds_data" style="width: 100%">
+        <el-table-column prop="name" label="产品" width='180px'>
+            <template #default="scope">
+                <el-button tag="a" type="primary" plain
+                :href="scope.row.link">{% vue 'scope.row.name' %}
+            </el-button>
+           </template>
+        </el-table-column>
+        <el-table-column prop="stt" label="状态"></el-table-column>
+      </el-table>
+
+</div></body>
+<script src="{% static 'fkb/vue.global.min.js' %}"></script>
+<script src="{% static 'fkb/element-plus.js' %}"></script>
+<script>
+    const App = {
+        data() {
+            return {
+                ongoing_type: "{% if ongoing == 'ongoing' %}{{ '进行中' }}{% else %}{{ '所有' }}{% endif %}",
+                pds_data : [{% for pd in pds %}
+                {% if pd.has_Pls|length > 0 %}
+                {
+                    name:'{{ pd.ttl }}',
+                    stt:'{{ pd.stt }}',
+                    link:"{% url 'pls' pd.uid ongoing %}",
+                },
+                {% endif %}
+            {% endfor %}]
+        } },//data
+        methods:{},
+        mounted(){
+            document.title = this.ongoing_type + "产品"
+        }
+    }
+    const app = Vue.createApp(App);
+    app.use(ElementPlus);
+    app.mount('#app')
+</script>
+</html>{% endspaceless %}

@@ -1,13 +1,12 @@
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
-from FlyKanBan.fkb.controls.util import Util
+from fkb.tools.util import Util
 
 from fkb.models import *
 
 class ProcTable(object):
     DB_TYPE:str = 'Artifact'
     ID_TYPE:str = 'X'
-    KEYS:list[str] = ['typ', 'uid']
     KEY_MAP:dict[str,str] = {'id':'uid'}
     HAS_DELETE:bool = True
     TABLE_NAME:str = 'table_from'
@@ -99,10 +98,10 @@ class ProcTable(object):
         sql = f'select {db_keys_str} from `{self.TABLE_NAME}` {where} order by {id_key} asc{limit}'
         return sql
 
-    def query_db(self, cur:Any)->list[Any]:
+    def query_db(self, query:Any)->list[Any]:
         try:
-            cur.execute(self.db_sql())
-            result = cur.fetchall()
+            query.execute(self.db_sql())
+            result = query.fetchall()
             result_len = len(result)
             if result_len == 0:
                 return []
@@ -116,21 +115,47 @@ class ProcTable(object):
 
 
 class ProcChild(ProcTable):
-    def _chg_children(self, dct:dict[str, Any], key:str):
+    
+    def _chg_rlt_has(self, dct:dict[str, Any], key:str):
         art_has_str = Util.pop_key(dct, key)
-        art_has = self._get_pls(art_has_str)
-        if art_has:
-            dct['rlt'] = art_has
+        if not art_has_str: return
+        _idx = key.rfind('_')
+        if _idx < 0: return
+        typ = key[_idx+1:]
+        art_has = self._get_has(art_has_str, typ)
 
-    def _get_pls(self, arts_str:str|None)->list[Any]|None:
-        if not arts_str: return
+        if 'rlt' not in dct:
+            dct['rlt'] = []
+
+        for a in art_has:
+            dct['rlt'].append(a)
+
+    def _get_has(self, arts_str:str, typ:str)->list[Any]:
         arts = arts_str.split(',')
         if len(arts) <= 0: return
         rlt:list[Any] = []
         for art in arts:
             art_id = int(art)
             if art_id <= 0: continue
-            rlt.append({'typ':self.ID_TYPE, 'art_b':art_id, 'rlt':'CN' })
+            rlt.append({'art_a':'this',
+                        'rlt':'CN',
+                        'art_b':{'typ':typ, 'uid':art_id},
+                        })
 
-        return rlt if len(rlt) > 0 else None
+        return rlt if len(rlt) > 0 else []
     
+
+    def _chg_rlt_of(self, dct:dict[str, Any], key:str):
+        uid = Util.pop_key(dct, key)
+        _idx = key.rfind('_')
+        if _idx < 0: return
+        typ = key[_idx+1:]
+
+        if 'rlt' not in dct:
+            dct['rlt'] = []
+
+        dct['rlt'].append({
+            'art_a': Artifact.make_pkeys(uid=uid, typ=typ),
+            'rlt': 'CN',
+            'art_b': 'this'
+            })
