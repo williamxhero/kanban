@@ -1,5 +1,12 @@
 
+from typing import Any
 from django.db import models
+
+def to_int(v:Any)->int:
+	try:
+		return int(v)
+	except:
+		return 0
 
 class VerNum:
 	v0:int=0
@@ -59,17 +66,17 @@ class VerNum:
 			if vs_len > 0:
 				try:
 					if vs_len >= 1:
-						v0 = int(vs[0])
+						v0 = to_int(vs[0])
 					if vs_len >= 2:
-						v1 = int(vs[1])
+						v1 = to_int(vs[1])
 					if vs_len >= 3:
-						v2 = int(vs[2])
+						v2 = to_int(vs[2])
 					if vs_len >= 4:
-						v3 = int(vs[3])
+						v3 = to_int(vs[3])
 				except:
 					pass
 		return v0,v1,v2,v3
-
+		
 	def __str__(self) -> str:
 		if self.v0 == self.v1 == self.v2 == self.v3 == 0:
 			if self.db_val != 0:
@@ -84,6 +91,11 @@ class VerNum:
 		if not isinstance(__value, VerNum):
 			__value = VerNum(str(__value))
 		return self.db_val == __value.db_val
+	
+	def __lt__(self, __value: object) -> bool:
+		if not isinstance(__value, VerNum):
+			__value = VerNum(str(__value))
+		return self.db_val < __value.db_val
 
 class FVer(models.Field):
 	def __init__(self, *args, **kwargs):

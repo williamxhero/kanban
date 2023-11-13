@@ -12,9 +12,12 @@ from fkb.tools.proc_table import ProcTable
 class SyncDb:
 
     def proc_db_tbl(self, pt:ProcTable):
+        print(f'Start sync {pt.ID_TYPE} ...')
         self.pt = pt
+        setattr(self.pt, 'query', self.query)
         while not self._sync_db_done():
             ...
+        print('Done.')
 
     def _load_db_sync_info(self)->Any:
         con_str = Config.get('db_connect')
@@ -45,7 +48,7 @@ class SyncDb:
         dct = None
 
         try:
-            result = self.pt.query_db(self.query)
+            result = self.pt.query_db()
             for row in result:
                 dct = self._row_to_dict(row, self.pt.KEY_MAP)
                 self.pt.change_dict(dct)
@@ -54,7 +57,7 @@ class SyncDb:
             self.pt.query_offset += len(result)
 
         except Exception as e:
-            print(f'{e}: {dct}')
+            print(f'ERROR: {type(e)}{e}. FOR: \n {dct}')
             return True
         
         return len(result) < self.pt.LIMIT_ONCE
@@ -67,6 +70,9 @@ class SyncDb:
         return None
 
     def _save_user(self, dct:dict[str,Any]):
+        if 'act' not in dct or not dct['act']:
+            return
+        
         pkvs = User.make_pkeys(**dct)
         obj, _ = User.objects.get_or_create(**pkvs)
         changed = self._set_new_attr(obj, dct)
@@ -76,25 +82,38 @@ class SyncDb:
             print(f'updated:{obj}')
 
     def _save_artifact(self, dct:dict[str,Any]):
+        if 'uid' not in dct or not dct['uid']:
+            return
+
         dct['typ'] = self.pt.ID_TYPE
         pkvs = Artifact.make_pkeys(**dct)
         obj, _ = Artifact.objects.get_or_create(**pkvs)
 
         dct_rlt = Util.pop_key(dct, 'rlt')
         dct_stg = Util.pop_key(dct, 'stg')
-        changed = self._set_new_attr(obj, dct)
-        
+        info_chgd = self._set_new_attr(obj, dct)
+
+        log = f'update {obj} '
+        if info_chgd:
+            log += '~inf'
+
         if is_some(dct_stg):
             if self._set_stage(obj, dct_stg):
-                print(f'updated:{obj} stg')
+                log += ' ~stg'
+                info_chgd = True
 
-        if is_some(dct_rlt):
-            if self._set_relate(obj, dct_rlt):
-                print(f'updated:{obj} rlt')
-
-        if changed:
+        if info_chgd:
             obj.save()
-            print(f'updated:{obj}')
+
+        rlt_chgd = False
+        if is_some(dct_rlt):
+            rlt_chgd = self._set_relate(obj, dct_rlt)
+            if rlt_chgd:
+                log += ' ~rlt'
+                rlt_chgd = True
+
+        if info_chgd or rlt_chgd:
+            print(log)
 
     def _set_new_attr(self, obj:Artifact, dct:dict[str,Any]):
         changed = False
@@ -105,71 +124,82 @@ class SyncDb:
         return changed
 
 
-    def _get_rel_arb(self, obj:Any, re:dict[str, Any]):
-        ''' if id is 0/''/None, returns None '''
-        kvs_a = re['art_a'] if 'art_a' in re else None
-        kvs_b = re['art_b'] if 'art_b' in re else None
+    def _get_obj_ab(self, this_obj:Any, re:dict[str, Any], art_a:bool):
+        key = 'art_a' if art_a else 'art_b'
+        if key not in re:return None
+        kvs = re[key]
+        if kvs == 'this': return this_obj
 
-        obj_a = None
-        obj_b = None
-
-        if isinstance(kvs_a, dict):
-            pkvs = Artifact.make_pkeys(**kvs_a)
-            obj_a, _ = Artifact.objects.get_or_create(**pkvs)
-
-        if isinstance(kvs_b, dict):
-            pkvs = Artifact.make_pkeys(**kvs_b)
-            obj_b, _ = Artifact.objects.get_or_create(**pkvs)
-
-        if kvs_a == 'this':
-            obj_a = obj
-
-        if kvs_b == 'this':
-            obj_b = obj
-
-        if obj_a is None or obj_b is None:
-            return None
+        if isinstance(kvs, dict):
+            pkvs = Artifact.make_pkeys(**kvs)
+            obj_ab, _ = Artifact.objects.get_or_create(**pkvs)
+            return obj_ab
         
-        rel, _ = Relation.objects.get_or_create(
+        return None
+
+    def _get_rel_ab(self, obj:Any, re:dict[str, Any]):
+        ''' if id is 0/''/None, returns None '''
+        obj_a = self._get_obj_ab(obj, re, True)
+        if obj_a is None: return None, False
+        obj_b = self._get_obj_ab(obj, re, False)
+        if obj_b is None: return None, False
+        
+        rel, new_ent = Relation.objects.get_or_create(
             art_a=obj_a, 
             rlt=re['rlt'], 
             art_b=obj_b)
         
+        re_rdr = re['rdr'] if 'rdr' in re else None
+        if rel.rdr != re_rdr:
+            rel.rdr = re_rdr
+            rel.save()
+            return rel, True
+    
+        return rel, new_ent
+
+    def _get_valid_rel(self, rel):
+        try:
+            arta = rel.art_a
+            artb = rel.art_b
+        except:
+            return None
+        
         return rel
 
-    def _set_relate(self, obj:Artifact, obj_rlt:list[dict[str,Any]]):
-        ''' obj_rlt 中只有：不同类父 和 同类子 两种关系'''
-        obj_rls = {}
-        changed = False
+    def _set_relate(self, obj:Artifact, new_rls:list[dict[str,Any]]):
+        old_rls_chgd = set()
+        rlt_changed = False
 
         rlts = Relation.objects.filter(Q(art_a=obj)|Q(art_b=obj)).all()
         if len(rlts) > 0:
             for rel in rlts:
-                if rel.art_b == obj:
-                    # obj的不同类父关系（ T/B->S->It->Pl->Pd )
-                    if rel.art_a.typ != obj.typ:
-                        obj_rls[str(rel)] = rel
-                else: 
-                    # obj的同类子关系
-                    if obj.typ == rel.art_b.typ:
-                        obj_rls[str(rel)] = rel
+                rel = self._get_valid_rel(rel)
+                if rel is None: 
+                    old_rls_chgd.add(rel)
+                    continue
 
-        for re in obj_rlt:
-            rel = self._get_rel_arb(obj, re)
+                if self.pt.relation_incharge(obj, rel):
+                    old_rls_chgd.add(rel)
+
+        rdr_changed = False
+        for re in new_rls:
+            rel, rdr_chgd = self._get_rel_ab(obj, re)
             if rel is None: continue
-
-            rel_key = str(rel)
-            if rel_key in obj_rls:
-                # nothing.
-                del obj_rls[rel_key]
+            if rdr_chgd: rdr_changed = True
+            
+            if rel in old_rls_chgd:
+                # not changed, remove from obj_rls.
+                old_rls_chgd.remove(rel)
             else:
-                changed = True
+                # new relation added to db.
+                rlt_changed = True
 
-        for rel in obj_rls.values():
+        # remains in obj_rls are to be deleted.
+        for rel in old_rls_chgd:
             rel.delete()
-            changed = True
+            rlt_changed = True
         
-        return changed
+        return rlt_changed or rdr_changed
 
     def _set_stage(self, obj:Artifact, stg:dict[str,Any]):
         changed = False
@@ -181,8 +211,10 @@ class SyncDb:
 
         diff = None if is_new else self._get_diff_attr(obj.stg, stg)
         if is_new or len(diff) > 0:
-            self._set_obj_changed(obj.stg, stg, diff)
-            obj.stg.save()
+            real_chgd = self._set_obj_changed(obj.stg, stg, diff)
+            if real_chgd:
+                obj.stg.save()
+                changed = True
 
         return changed
     

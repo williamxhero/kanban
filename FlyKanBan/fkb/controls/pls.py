@@ -32,7 +32,7 @@ def get_data(pd_id:int, ongoing:str, **kvargs):
                 if hasattr(pl, 'has_Its') and len(pl.has_Its) > 0:
                     pls_has_it = True
                     break
-        pd.pls_has_it = pls_has_it
+        setattr(pd, 'pls_has_it', pls_has_it)
     
     return {'pds':pd_lst,
             'cur_pd':cur_pd,

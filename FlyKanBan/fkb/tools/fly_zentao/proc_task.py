@@ -1,12 +1,15 @@
 
 from work_hours import WorkHours
 
+from fkb.tools.util import Util
 from fkb.models import *
-from fkb.tools.proc_table import ProcTable
+from fkb.tools.proc_table import ProcChild
+from fkb.tools.fly_zentao.proc_mixin import ProcMixin
 
-class ProcTask(ProcTable):
+class ProcTask(ProcChild, ProcMixin):
     
     KEY_MAP = {
+        # == inf: ==
         'id':'uid',
         'name':'ttl',
         'pri':'_pri',
@@ -28,8 +31,6 @@ class ProcTask(ProcTable):
         'deadline':'ddl_tim',
 
         # == stg: ==
-        #'assignedDate':'_arr_tim', # if task is closed，it's closedDate
-
         'startEstimate':'_dev_dur_est',
         'realStarted':'_dev_srt_tim',
         'finishedDate':'_dev_end_tim',
@@ -43,10 +44,12 @@ class ProcTask(ProcTable):
         'lastPausedDate':'_psd_srt_time',
         'pausedHr':'_psd_dur', # hour to timespan
 
-        # rel: # 只处理 不同类父 和 同类子
-        'parent':'_parent',
-        'project':'_itor',
-        }
+        # == rel: == 
+        # 处理所有 本体是子类的关系
+        'project':'_of_It',
+        'story':'_of_S',
+        'parent':'_of_T',
+    }
 
     TABLE_NAME = 'zt_task'
     ID_START_FROM = 6879
@@ -62,18 +65,19 @@ class ProcTask(ProcTable):
 
     wh = WorkHours()
 
-    def _calc_dur_hr(self, start_str, end_str, psd_hr):
-        if start_str is None: return 0
-        if end_str is None: return 0
-        srt_time = str_date(start_str)
-        end_time = str_date(end_str)
-            
-        dv_dur = self.wh.calc(srt_time, end_time)
-        dv_dur -= psd_hr
+    def _calc_dur_hr(self, start_dt, end_dt, psd_hr):
+        if not start_dt or not end_dt:
+            return 0
+        dv_dur = self.wh.calc(start_dt, end_dt)
+        dv_dur -= to_int(psd_hr)
         return dv_dur
 
-   
     def change_dict(self, dct):
+        if self._null_dct_if_key_art_not_exist(dct, '_of_It'):
+            return
+        if self._null_dct_if_key_art_not_exist(dct, '_of_S'):
+            return
+        
         self._chg_pri(dct)
         self._chg_stt(dct, self.STT_KV)
         self._chg_usr(dct, 'crt_usr')
@@ -90,6 +94,8 @@ class ProcTask(ProcTable):
         dv_dur_hr = self._calc_dur_hr(dev_srt_tim, dev_end_tim, psd_dur_hr)
         
         dct['stg'] = {
+            # 创建时间 即为 评审时间
+            'rev_end_tim':dct['crt_tim'], 
             'dev_dur_est':self._hr2dur(dev_dur_hr_est),
             'dev_srt_tim':dev_srt_tim,
             'dev_end_tim':dev_end_tim,
@@ -97,16 +103,15 @@ class ProcTask(ProcTable):
             'dev_usr':rsp_usr,
             'psd_srt_time':psd_srt_time,
             'psd_dur':self._hr2dur(psd_dur_hr),
+            # 关闭时间 即为 验收时间
             'acc_end_tim':cls_tim,
             'acc_usr':cls_usr,
         }
 
-        prt_uid = Util.pop_key(dct, '_parent')
-        itr_uid = Util.pop_key(dct, '_itor')
-        dct['rlt'] = [
-            {'typ': 'T', 'art_a' : prt_uid, 'rlt':'CN'},
-            {'typ': 'It', 'art_a' : itr_uid, 'rlt':'CN'}
-        ]
-        
+        self._chg_rlt_of(dct, '_of_It', None)
+        self._chg_rlt_of(dct, '_of_S', None)
+        self._chg_rlt_of(dct, '_of_T', None)
 
 
+    def relation_incharge(self, obj, rlt) -> bool:
+        return self.relation_incharge_B(obj, rlt)

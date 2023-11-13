@@ -55,18 +55,20 @@ def load_children(art_as:Iterable[Any], rlt, **b_kvargs)->list[Any]:
     '''
     if 'typ' not in b_kvargs: return
     b_typ = b_kvargs['typ']
+    if isinstance(b_typ, str):
+        b_typ = [b_typ]
 
-    children_key = f'has_{b_typ}s'
     children = []
     rls = Relation.objects.filter(art_a__in=art_as, rlt=rlt).all()
     b_stt = b_kvargs['stt'] if 'stt' in b_kvargs else None
     for rl in rls:
-        if rl.art_b.typ != b_typ: continue
+        if rl.art_b.typ not in b_typ: continue
+        children_key = f'has_{rl.art_b.typ}s'
         rl_art_b = _last_version(rl.art_b)
         if is_some(b_stt) and rl_art_b.stt != b_stt: continue
         art_a = _same_from_collection(rl.art_a, art_as, {children_key:[]})
         art_b = _same_from_collection(rl_art_b, art_as) \
-            if b_typ == art_a.typ else None
+            if art_a.typ in b_typ else None
         if art_b is None:
             art_b = rl_art_b
 

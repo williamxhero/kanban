@@ -4,6 +4,11 @@ from typing import Any, TypeVar
 from FlyKanBan.db_type.internal_fields import *
 from FlyKanBan.db_type.version4_field import FVer, VerNum
 
+def to_int(v:Any):
+	try:
+		return int(v)
+	except:
+		return 0
 
 def is_some(v:Any): 
 	return v is not None
@@ -109,15 +114,26 @@ class User(models.Model):
 	
 	def __hash__(self) -> int:
 		return self.act.__hash__()
-	
+
 class Relation(models.Model):
 	art_a = KC('Artifact', '主制品', 'rel_a')
 	rlt = FSttN('关系类型', RELATION)
 	art_b = KC('Artifact', '被关联制品', 'rel_b')
+	rdr = FUIntN('顺序(b在a中的顺序)') # 0, 1, 2, 3, ... 越小越靠前
 
 	def __str__(self) -> str:
 		return f'{self.art_a}>{self.rlt}>{self.art_b}'
 	
+	def __hash__(self) -> int:
+		return self.__str__().__hash__()
+	
+	def __eq__(self, __value: object) -> bool:
+		if isinstance(__value, Relation):
+			return self.art_a == __value.art_a and\
+				   self.rlt == __value.rlt and\
+				   self.art_b == __value.art_b
+		return super().__eq__(__value)
+
 	class Meta():
 		indexes = [
 			Index('art_a'),
@@ -162,6 +178,8 @@ class ArtStage(models.Model):
 	pub_usr = KUserND('发布人员', 'art_pub')
 
 	ddl_tim = FDateTimeN('截止(deadline)时间')
+	
+	ver_lst = FVer('版本(最新)')
 
 	class Meta():
 		indexes = [
@@ -203,15 +221,17 @@ class ArtStage(models.Model):
 
 class Artifact(models.Model):
 	''' 
-	其实涵盖了所有和项目产品相关信息：产品，计划，迭代，需求，任务，BUG等等
+	其实涵盖了所有和项目产品相关信息：
+	产品类：产品，需求，BUG 等
+	项目类：计划，迭代，任务 等
 	本类为制品自身属性
 	'''	
 	# 自身属性：
 	typ = FStt('类型', ARTTYPE, 'T')
 	uid = FUInt('主库ID') # mostly is remote db id
-	ver = FVer('版本')
-	stt = FStt('状态', STATUS, '-XJ')
+	ver = FVer('版本(当前)') # 用来索引的ver。如果不用来索引，使用 stg.ver_lst
 
+	stt = FStt('状态', STATUS, '-XJ')
 	sht = FChar32N('简称')
 	ttl = FChar32N('标题')
 	pnt = FFloatN('点数(评审)')
@@ -224,7 +244,6 @@ class Artifact(models.Model):
 
 	rsp_usr = KUserND('负责人员', 'art_rsp')
 	pri = FSttN('优先级', PRIORITY)
-	rdr = FUIntN('顺序')
 
 	stg = F1To1CN(ArtStage)
 	rlt = FNToNN('self', Relation) # 相关联制品
@@ -278,6 +297,7 @@ class Artifact(models.Model):
 			return has_key
 
 		return super().__eq__(__value)
+	
 
 _T = TypeVar('_T', bound=str|None)
 

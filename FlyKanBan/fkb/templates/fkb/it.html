@@ -7,11 +7,49 @@
 <link rel="stylesheet" href="{% static 'fkb/element-plus.css'%}">
 </head>
 
-<body>
+<body><div id="app">
+<div class="common-layout">
+<el-container>
+<el-aside width="200px">
+
+{{id_it.ttl}} <br/>
+{% for it, sts in its.items%}
+V{{it.ver}}<br/>
+
+{% for st in sts %}
+{% if st.typ == 'S' %}
+-- {{st.ttl}}<br/>
+{% else %}
+--- {{st.ttl}}<br/>
+{% endif %}
+{% endfor %}
 
 
+{% endfor %}
+</el-aside>
+<el-main>
+    main
+</el-main>
+</el-container>
+</div>
+</div></body>
+<script src="{% static 'fkb/vue.global.min.js' %}"></script>
+<script src="{% static 'fkb/element-plus.js' %}"></script>
+<script>
+    const App = {
+        data() {
+            return {
 
+        } },//data
+        methods:{},
+        mounted(){
+            document.title = this.ongoing_type + "产品"
+        }
+    }
+    const app = Vue.createApp(App);
+    app.use(ElementPlus);
+    app.mount('#app')
+</script>
 
-
-</body></html>
+</html>
 {% endspaceless %}

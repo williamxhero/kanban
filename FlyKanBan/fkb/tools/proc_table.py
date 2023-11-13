@@ -1,4 +1,5 @@
 from datetime import timedelta
+import itertools
 from typing import Any
 from fkb.tools.util import Util
 
@@ -13,6 +14,7 @@ class ProcTable(object):
     LIMIT_ONCE:int = 500
     ID_START_FROM = 0
     query_offset:int = 0
+    query:Any = None
 
     def _hr2dur(self, val:Any):
         ''' hours to duration(timedelta) '''
@@ -97,11 +99,11 @@ class ProcTable(object):
         limit = f' limit {self.LIMIT_ONCE} offset {self.query_offset}' if self.LIMIT_ONCE else ''
         sql = f'select {db_keys_str} from `{self.TABLE_NAME}` {where} order by {id_key} asc{limit}'
         return sql
-
-    def query_db(self, query:Any)->list[Any]:
+    
+    def query_db_sql(self, sql:str):
         try:
-            query.execute(self.db_sql())
-            result = query.fetchall()
+            self.query.execute(sql)
+            result = self.query.fetchall()
             result_len = len(result)
             if result_len == 0:
                 return []
@@ -110,52 +112,130 @@ class ProcTable(object):
             print(e)
             return []
 
+    def query_db(self)->list[Any]:
+        sql = self.db_sql()
+        return self.query_db_sql(sql)
+
     def change_dict(self, dct:dict[str,Any])->None:
         ...
 
+    def relation_incharge(self, obj, rlt)->bool:
+        ...
 
 class ProcChild(ProcTable):
     
-    def _chg_rlt_has(self, dct:dict[str, Any], key:str):
-        art_has_str = Util.pop_key(dct, key)
-        if not art_has_str: return
-        _idx = key.rfind('_')
-        if _idx < 0: return
-        typ = key[_idx+1:]
-        art_has = self._get_has(art_has_str, typ)
+    def _get_type_ids(self, dct, keys:str, uid_is_list:bool):
+        val_str = Util.pop_key(dct, keys)
+        if not val_str: return None,None
 
+        _idx = keys.rfind('_')
+        if _idx < 0: return None, None
+
+        key = keys[_idx+1:]
+
+        if uid_is_list:
+            uids = val_str.split(',')
+            if len(uids) <= 0: return None, None
+            ids = []
+            for uid in uids:
+                id = to_int(uid)
+                if id <= 0: continue
+                ids.append(id)
+            return key, ids
+
+        return key, to_int(val_str)
+
+
+    def _chg_rlt_has(self, dct:dict[str, Any], keys:str):
+        ''' keys : xxx_Pl, xxx_Pd, xxx_Typ ... '''
+        typ, uid_has = self._get_type_ids(dct, keys, True)
+        if not typ: return
+        for idx, uid in enumerate(uid_has):
+            self._append_rlt(dct, False, typ, uid, idx)
+    
+    def _get_uid_rdr(self, uids:list[int], rdrs_str:str):
+        ''' 将 rdrs_str 按照 uids 的长度进行补齐 (用None) '''
+        rdrs = rdrs_str.split(',')
+        return itertools.zip_longest(uids, rdrs, fillvalue=None)
+
+    def _chg_rlt_ofs(self, dct:dict[str, Any], keys:str, rdrs:str):
+        typ, uid_ofs = self._get_type_ids(dct, keys, True)
+        if not typ: return
+
+        id_rd = self._get_uid_rdr(uid_ofs, rdrs)
+        for uid, rdr in id_rd:
+            self._append_rlt(dct, True, typ, uid, rdr)
+
+    def _chg_rlt_of(self, dct:dict[str, Any], key:str, rdr:Any):
+        typ, uid_of = self._get_type_ids(dct, key, False)
+        if not typ: return
+        self._append_rlt(dct, True, typ, uid_of, rdr)
+
+
+    def _append_rlt(self, dct:dict[str, Any], is_a:bool, 
+                    typ:str,
+                    uid:Any,
+                    rdr:Any=None,):
+        uid_int = to_int(uid)
+        if uid_int <= 0: return
+        
         if 'rlt' not in dct:
             dct['rlt'] = []
 
-        for a in art_has:
-            dct['rlt'].append(a)
+        art = Artifact.make_pkeys(uid=uid_int, typ=typ)
+        rlt_dct = {
+            'art_a': art if is_a else 'this',
+            'rlt': 'CN',
+            'art_b': 'this' if is_a else art,
+            }
+        
+        rdr_int = to_int(rdr)
+        if is_some(rdr):
+            rlt_dct['rdr'] = rdr_int
+        dct['rlt'].append(rlt_dct)
 
-    def _get_has(self, arts_str:str, typ:str)->list[Any]:
-        arts = arts_str.split(',')
-        if len(arts) <= 0: return
-        rlt:list[Any] = []
-        for art in arts:
-            art_id = int(art)
-            if art_id <= 0: continue
-            rlt.append({'art_a':'this',
-                        'rlt':'CN',
-                        'art_b':{'typ':typ, 'uid':art_id},
-                        })
 
-        return rlt if len(rlt) > 0 else []
+    def _null_dct_if_key_art_not_exist(self, dct, key:str):
+        ''' return if deleted. '''
+        
+        if 'uid' not in dct: return
+        if key not in dct : return
+
+        _idx = key.rfind('_')
+        if _idx < 0:
+            del dct['uid']
+            return True
+        
+        typ = key[_idx+1:]
+        uid = dct[key]
+
+        if not Artifact.objects.filter(typ=typ, uid=uid).exists():
+            del dct['uid']
+            return True
+
+        return False
     
 
-    def _chg_rlt_of(self, dct:dict[str, Any], key:str):
-        uid = Util.pop_key(dct, key)
-        _idx = key.rfind('_')
-        if _idx < 0: return
-        typ = key[_idx+1:]
+    def relation_incharge_A(self, obj:Artifact, rel:Relation) -> bool:
+        '''只处理: 
+        * 子(本体) -> 不同父
+        * 父(本体) -> 相同子
+        '''
+        if rel.art_b == obj: 
+            # 本体子:
+            # 不同类 父关系: Pd->Pl->It->S->T
+            return rel.art_a.typ != obj.typ
+        
+        elif rel.art_a == obj:
+            # 本体父：
+            # 同类子关系: Pd->Pd, Pl->Pl, It->It, S->S
+            return obj.typ == rel.art_b.typ
+        return False
 
-        if 'rlt' not in dct:
-            dct['rlt'] = []
-
-        dct['rlt'].append({
-            'art_a': Artifact.make_pkeys(uid=uid, typ=typ),
-            'rlt': 'CN',
-            'art_b': 'this'
-            })
+    def relation_incharge_B(self, obj, rel) -> bool:
+        '''只处理 本体子'''
+        if rel.art_a == obj: 
+            # 本体父:
+            return False
+        
+        return rel.art_b == obj
