@@ -1,5 +1,5 @@
 from fkb.models import *
-from fkb.tools.proc_table import ProcTable
+from fkb.tools.sync_db.proc_table import ProcTable
 
 class ProcBug(ProcTable):
     
@@ -25,8 +25,8 @@ class ProcBug(ProcTable):
         'resolved':'-KF',
         'closed':'-GB',
     }
-    TABLE_NAME = 'zt_bug'
-    ID_START_FROM = 8118
+    SQL_TABLE_NAME = 'zt_bug'
+    SQL_ID_START_FROM = 8118
     ID_TYPE = 'B'
 
     def change_dict(self, dct:dict[str,Any]):

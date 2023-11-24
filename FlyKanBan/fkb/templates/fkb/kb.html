@@ -1,0 +1,152 @@
+{%spaceless%}{%load static%}{%load vue%}
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0">
+<title></title>
+<script src="{%static 'fkb/echarts.min.js'%}"></script>
+<script src="{%static 'fkb/echarts.chalk.js'%}"></script>
+<link rel="stylesheet" href="{%static 'fkb/element-plus.css'%}">
+<link rel="stylesheet" href="{%static 'fkb/element-plus_theme-chlk_dark_css-vars.css'%}">
+<link rel="stylesheet" href="{%static 'fkb/it.css'%}">
+</head>
+
+<body><div id="app">
+<div class="common-layout">
+<el-container>
+<el-aside width="500px" height="100%">
+<a href="{% url 'pds' 'ongoing' %}">
+{{id_it.of_Pd.ttl}}</a> / {{id_it.of_Pl.ttl}} / {{id_it.ttl}} 
+<el-text size="small" type="info"> 下次同步:{{next_sync|date:'m/d H:i'}}</el-text>
+<br/>
+
+<el-space direction="vertical" alignment="start" :size="1">
+{%for it, STs in its.items%}
+{%if STs%}
+<el-button type="info" plain><el-text size="large" tag="b">V{{it.ver}} {{it.crt_tim|date:'Y-m-d'}} ~ {{it.cls_tim|date:'Y-m-d'}} </el-text>
+</el-button>
+{%for st in STs%}
+{%if st.typ == 'S'%}
+<!-- li><strong> {{st.ttl}} </strong></li -->
+{%else%}
+<el-text class="task {{st.stt}}"> <div class='tsk_uid'>T#{{st.uid}}</div>
+  {{st.ttl}} <div class='tsk_pts'><{{st.pts}}></div>
+</el-text>
+{%endif%}
+{%endfor%}
+{%endif%}{%endfor%}
+</el-space>
+</el-aside>
+<el-main><div id="it_chart"></div></el-main>
+</el-container>
+</div>
+</div></body>
+<script src="{%static 'fkb/vue.global.min.js'%}"></script>
+<script src="{%static 'fkb/element-plus.js'%}"></script>
+<script>
+  const App = {
+    data() { return {
+      //data
+    } },
+    methods:{},
+    mounted(){
+      document.title = "{{id_it.ttl}} / {{id_it.of_Pl.ttl}} / {{id_it.of_Pd.ttl}}"
+    }
+  }
+  const app = Vue.createApp(App);
+  app.use(ElementPlus);
+  app.mount('#app')
+</script>
+<script>
+DATASET = [
+{
+  source:[
+  ['{{last_it.crt_tim|date:"Y-m-d"}}', 0],
+  ['{{last_it.cls_tim|date:"Y-m-d"}}', {{total|floatformat:1}}] 
+  ]
+},
+{
+  source:[
+  {%for burn in chart%}
+  ['{{burn.0|date:"Y-m-d"}}', {{burn.1|floatformat:1}}],
+  {%endfor%}
+  ]
+},
+{
+  source:[
+  {%for mt in mtcs%}
+  ['{{mt.0}}', {{mt.1|floatformat:1}}, {{mt.2|floatformat:1}},{{mt.3|floatformat:1}}, {{mt.4|floatformat:2}}],
+  {%endfor%}
+  ]
+},
+{
+  source:[
+  {%for mt in ave_mtcs%}
+  ['{{mt.0}}', {{mt.1|floatformat:1}}, {{mt.2|floatformat:1}},{{mt.3|floatformat:1}}, {{mt.4|floatformat:2}}],
+  {%endfor%}
+  ]
+}
+]
+
+var option = {
+  legend:[
+  {data:['理想','现实'],right:'50%'},
+  {data:['总点MA','人均点MA'],top:'50%',right:'50%'},
+  {data:['总工时MA','工时点MA'],right:'2%'},
+  ],
+  title:[
+  {text:'增长图'},  {text:'迭代点数',top:'50%'},
+  {text:'迭代能力',left:'53%'},
+  ],
+  tooltip:{},
+  dataset: DATASET,
+  xAxis:[
+  {type:'time',gridIndex:0,interval:1},
+  {type:'value',gridIndex:1,min:'{{mtcs_frt}}',max:'{{mtcs_lst}}',interval:1},
+  {type:'value',gridIndex:2,min:'{{mtcs_frt}}',max:'{{mtcs_lst}}',interval:1},
+  ],
+  yAxis:[
+  {type:'value',gridIndex:0},
+  {type:'value',gridIndex:1},
+  {type:'value',gridIndex:2},{type:'value',gridIndex:2,position:'right',max:1},
+  ],
+  grid:[
+  {left:'1%',bottom:'55%',right:'50%'},
+  {left:'1%',top:'55%',right:'50%'},
+  {left:'53%',bottom:'55%',right:'2%'},
+  ],
+  series:[
+  {name:'理想',type:"line",datasetIndex:0,encode:{x:0,y:1,},
+  label:{show:true,},},
+  {name:'现实',type:"line",datasetIndex:1,encode:{x:0,y:1,},
+  label:{show:true,},},
+
+  {name:'总点',type:"line",datasetIndex:2,encode:{x:0,y:1,},
+  xAxisIndex:1,yAxisIndex:1,areaStyle:{opacity:0.5},color:'#f7f49466'},
+  {name:'总点MA',type:"line",datasetIndex:3,encode:{x:0,y:1,},
+  xAxisIndex:1,yAxisIndex:1,smooth:true,label:{show:true,},color:'#f7f494'},
+
+  {name:'人均点',type:"line",datasetIndex:2,encode:{x:0,y:2,},
+  xAxisIndex:1,yAxisIndex:1,areaStyle:{opacity:0.5},color:'#72ccff66'},
+  {name:'人均点MA',type:"line",datasetIndex:3,encode:{x:0,y:2,},
+  xAxisIndex:1,yAxisIndex:1,smooth:true,label:{show:true,},color:'#72ccff'},
+  
+  {name:'总工时',type:"line",datasetIndex:2,encode:{x:0,y:3,},
+  xAxisIndex:2,yAxisIndex:2,areaStyle:{opacity:0.5},color:'#f7c5a0'},
+  {name:'总工时MA',type:"line",datasetIndex:3,encode:{x:0,y:3,},
+  xAxisIndex:2,yAxisIndex:2,smooth:true,label:{show:true,},color:'#f7c5a0'},
+
+  {name:'工时点',type:"line",datasetIndex:2,encode:{x:0,y:4,},
+  xAxisIndex:2,yAxisIndex:3,areaStyle:{opacity:0.5},color:'#d4a4eb'},
+  {name:'工时点MA',type:"line",datasetIndex:3,encode:{x:0,y:4,},
+  xAxisIndex:2,yAxisIndex:3,smooth:true,label:{show:true,},color:'#d4a4eb'},
+  ]
+};
+
+var dom = document.getElementById('it_chart')
+var myChart = echarts.init(dom, 'chalk');
+myChart.setOption(option);
+</script>
+
+</html>
+{%endspaceless%}

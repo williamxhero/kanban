@@ -1,23 +1,37 @@
 from datetime import date
 from typing import Any
+from fkb.mod_type import to_int
 from fkb.models import is_some
 from fkb.tools.util import Util
 
 class ProcMixin(object):
+    def _chg_pnt(self, dct, key='_pnt'):
+        pnt = Util.pop_key(dct, key)
+        
+        if is_some(pnt):
+            int_pnt = float(pnt)
+            if int_pnt < 0.000000001: # 9x0
+                int_pnt = -1
+            dct[key[1:]] = pnt
+
+        if key == '_pnt':
+            self._chg_pnt(dct, key='_pnt_est')
+
     def _chg_pri(self, dct:dict[str,Any]):
         pri = Util.pop_key(dct, '_pri')
-        if pri is None:
-            return
-        if pri == '1':
+        pri = to_int(pri)
+        if not pri:return
+
+        if pri == 1:
             dct['pri'] = 'HI'  # 高
-        elif pri == '2':
-            dct['pri'] = 'MI+' # 中
-        elif pri == '3':
+        elif pri == 2:
+            dct['pri'] = 'MIT' # 中
+        elif pri == 3:
             dct['pri'] = 'MI' # 常
-        elif pri == '4':
+        elif pri == 4:
             dct['pri'] = 'LO' # 低
-        elif pri == '5':
-            dct['pri'] = 'LO-' # 微
+        elif pri == 5:
+            dct['pri'] = 'LO_' # 微
     
     def _chg_ttl_sht(self, dct:dict[str, Any]):
         ttl = Util.pop_key(dct, '_ttl')

@@ -2,17 +2,13 @@ from typing import Iterable
 from fkb.models import *
 
 def _same_from_collection(obj:object, 
-                          objs:Iterable[Any],
-                          new_kvs:dict[str, Any]={})->Any:
+                          objs:Iterable[Any])->Any:
     for o in objs:
         if o == obj:
-            for k,v in new_kvs.items():
-                if not hasattr(o, k):
-                    setattr(o, k, v)
             return o
-    return None
+    return obj
 
-def _last_version(art:Artifact):
+def last_version(art:Artifact):
     last_ver_art = Artifact.objects.filter(
         typ=art.typ, uid=art.uid).order_by('-ver').first()
     if last_ver_art is None: return art
@@ -23,58 +19,86 @@ def _last_version(art:Artifact):
     return last_ver_art
 
 
-def load_parents(art_bs:Iterable[Any], rlt, **a_kvargs):
-    if 'typ' not in a_kvargs: return
-    a_typ = a_kvargs['typ']
-    parent_key = f'of_{a_typ}'
+def _get_typ_stt(**kwargs):
+    if 'typ' not in kwargs: return None, None
+    typ = kwargs['typ']
+    if isinstance(typ, str):
+        typ = [typ]
+
+    stt = kwargs['stt'] if 'stt' in kwargs else None
+
+    return typ, stt
+
+def _a_append_has_b(rl, art_a, art_b):
+    has_key = f'has_{rl.art_b.typ}s'
+    attr = getattr(art_a, has_key, [])
+    attr.append(art_b)
+    setattr(art_a, has_key, attr)
+
+
+def load_parents(art_b_lst:Iterable[Any], rlt, **a_kvargs):
+    a_typ, a_stt = _get_typ_stt(**a_kvargs)
+    if not a_typ: return []
+
     parents = []
-    rls = Relation.objects.filter(art_b__in=art_bs, rlt=rlt).all()
-    a_stt = a_kvargs['stt'] if 'stt' in a_kvargs else None
+    rls = Relation.objects.filter(art_b__in=art_b_lst, rlt=rlt, art_a__typ__in=a_typ).all()
     for rl in rls:
-        if rl.art_a.typ != a_typ: continue
-        rl_art_a = _last_version(rl.art_a)
-        if is_some(a_stt) and rl_art_a.stt != a_stt: continue
-        art_b = _same_from_collection(rl.art_b, art_bs, {parent_key:True})
-        art_a = _same_from_collection(rl_art_a, art_bs, {f'has_{art_b.typ}s':[]}) \
-            if a_typ == art_b.typ else None
-        if art_a is None:
-            art_a = rl_art_a
-        
-        setattr(art_a, f'has_{art_b.typ}', art_b)
-        setattr(art_b, parent_key, art_a)
+        if is_some(a_stt) and rl.art_a.stt != a_stt: continue
+        art_b = _same_from_collection(rl.art_b, art_b_lst)
+        art_a = _same_from_collection(rl.art_a, art_b_lst)
+        setattr(art_b, f'of_{rl.art_a.typ}', art_a)
+        _a_append_has_b(rl, art_a, art_b)
         parents.append(art_a)
 
     return parents
 
 
-
-def load_children(art_as:Iterable[Any], rlt, **b_kvargs)->list[Any]:
+def load_children(art_as:Iterable[Artifact], rlt, **b_kvargs)->list[Artifact]:
     ''' children will have a new attribute `of_<a.typ>`  
 
     parents will have a new attribute `has_<b.typ>s`
     '''
-    if 'typ' not in b_kvargs: return
-    b_typ = b_kvargs['typ']
-    if isinstance(b_typ, str):
-        b_typ = [b_typ]
+    b_typ, b_stt = _get_typ_stt(**b_kvargs)
+    if not b_typ: return []
 
     children = []
-    rls = Relation.objects.filter(art_a__in=art_as, rlt=rlt).all()
-    b_stt = b_kvargs['stt'] if 'stt' in b_kvargs else None
+    rls = Relation.objects.filter(art_a__in=art_as, rlt=rlt, art_b__typ__in=b_typ).all()
     for rl in rls:
-        if rl.art_b.typ not in b_typ: continue
-        children_key = f'has_{rl.art_b.typ}s'
-        rl_art_b = _last_version(rl.art_b)
-        if is_some(b_stt) and rl_art_b.stt != b_stt: continue
-        art_a = _same_from_collection(rl.art_a, art_as, {children_key:[]})
-        art_b = _same_from_collection(rl_art_b, art_as) \
-            if art_a.typ in b_typ else None
-        if art_b is None:
-            art_b = rl_art_b
-
+        if is_some(b_stt): 
+            art_b = last_version(rl.art_b)
+            if art_b.stt != b_stt:
+                continue
+        art_a = _same_from_collection(rl.art_a, art_as)
+        art_b = _same_from_collection(rl.art_b, art_as)
         setattr(art_b, f'of_{art_a.typ}', art_a)
-        attr = getattr(art_a, children_key)
-        attr.append(art_b)
+        _a_append_has_b(rl, art_a, art_b)
         children.append(art_b)
 
     return children
+
+from apscheduler.schedulers.background import BackgroundScheduler
+scd = BackgroundScheduler()
+std = False # started
+
+def run():
+    from fkb.tools.proc_table_flyzt import PTFZT
+    p = PTFZT()
+    p.sync_all()
+
+
+def run_scheduler():
+    global std, scd
+    
+    jobs = scd.get_jobs()
+
+    if len(jobs) == 0:
+        if not run: return None
+        job = scd.add_job(run, 'cron', day_of_week='mon-fri', hour=6, minute=0)
+    else:
+        job = jobs[0]
+    
+    if not std:
+        scd.start()
+        std = True
+
+    return job.next_run_time

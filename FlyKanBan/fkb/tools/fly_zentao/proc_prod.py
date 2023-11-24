@@ -1,6 +1,6 @@
 from fkb.tools.util import Util
 from fkb.models import *
-from fkb.tools.proc_table import ProcChild
+from fkb.tools.sync_db.proc_table import ProcChild
 from fkb.tools.fly_zentao.proc_mixin import ProcMixin
 
 class ProcEntry(ProcChild, ProcMixin):
@@ -8,7 +8,7 @@ class ProcEntry(ProcChild, ProcMixin):
         'id':'uid',
     }
 
-    def db_sql(self):
+    def db_sql(self, limit):
         sql = f'select 1'
         return sql
 
@@ -40,7 +40,7 @@ class ProcProd(ProcChild, ProcMixin):
         'closed':'-GB', # 已关闭
     }
 
-    TABLE_NAME = 'zt_product'
+    SQL_TABLE_NAME = 'zt_product'
     ID_TYPE = 'Pd'
 
     def change_dict(self, dct):

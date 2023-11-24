@@ -2,24 +2,12 @@ from typing import Any
 
 from django.shortcuts import render
 from django.http import HttpResponse
-from apscheduler.schedulers.background import BackgroundScheduler
 
-from fkb.tools.sync_db import SyncDb
-
-scheduler = BackgroundScheduler()
-
-def run():
-    SyncDb().sync()
 
 def index(request:Any):
-    jobs = scheduler.get_jobs()
-    if len(jobs) == 0:
-        job = scheduler.add_job(run, 'cron', hour='9-19', minute='0')
-    else:
-        job = jobs[0]
-    scheduler.start()
-    return HttpResponse(f"last run: {job.next_run_time}")
-
+    from fkb.controls.util import run_scheduler
+    next_time = run_scheduler()
+    return HttpResponse(f"next run: {next_time}")
 
 def _render(request:Any, func, html, **kvargs:Any):
     datas = func(**kvargs)
@@ -59,10 +47,10 @@ def its(request:Any, pl_id:int, str_args:str):
     return _render(request, get_data, "fkb/its.html", **kvargs)
 
 
-def it(request:Any, it_id:int):
-    from fkb.controls.it import get_data
+def kb(request:Any, typ:str, id:int):
+    from fkb.controls.kb import get_data
     kvargs = {
-        'it_id':it_id,
-        }
-    return render(request, "fkb/it.html", 
-                  get_data(**kvargs) )
+        'typ':typ,
+        'id':id,
+        }    
+    return _render(request, get_data, "fkb/kb.html", **kvargs)

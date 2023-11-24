@@ -5,24 +5,26 @@ import MySQLdb
 from django.db.models import Q
 
 from fkb.models import *
-from fkb.tools.util import Util
-from fkb.tools.proc_table import ProcTable
+from fkb.tools.util import Util, Print
+from fkb.tools.sync_db.proc_table import ProcTable
+
 
 
 class SyncDb:
 
     def proc_db_tbl(self, pt:ProcTable):
-        print(f'Start sync {pt.ID_TYPE} ...')
+        Print.log(f'Start sync {pt.ID_TYPE} ...')
         self.pt = pt
         setattr(self.pt, 'query', self.query)
+        self.pt.before_sync()
         while not self._sync_db_done():
             ...
-        print('Done.')
+        Print.log('Done.')
 
     def _load_db_sync_info(self)->Any:
         con_str = Config.get('db_connect')
         if con_str is None:
-            print('db_connect not set in Config')
+            Print.log('db_connect not set in Config')
             return None, None
 
         try:
@@ -52,26 +54,31 @@ class SyncDb:
             for row in result:
                 dct = self._row_to_dict(row, self.pt.KEY_MAP)
                 self.pt.change_dict(dct)
-                self._save_dict(dct)
+                log = self._save_dict(dct)
+                if log is None:
+                    Print.dot()
+                else:
+                    Print.log(log)
 
-            self.pt.query_offset += len(result)
+            self.pt.sql_offset += len(result)
 
         except Exception as e:
-            print(f'ERROR: {type(e)}{e}. FOR: \n {dct}')
+            Print.log(f'ERROR: {type(e)}{e}. FOR: \n {dct}')
             return True
         
-        return len(result) < self.pt.LIMIT_ONCE
+        return len(result) < self.pt.SQL_LIMIT
 
     def _save_dict(self, dct:dict[str,Any]):
+        log = None
         if self.pt.DB_TYPE == 'User':
-            self._save_user(dct)
+            log = self._save_user(dct)
         elif self.pt.DB_TYPE == 'Artifact':
-            self._save_artifact(dct)
-        return None
+            log = self._save_artifact(dct)
+        return log
 
     def _save_user(self, dct:dict[str,Any]):
         if 'act' not in dct or not dct['act']:
-            return
+            return False
         
         pkvs = User.make_pkeys(**dct)
         obj, _ = User.objects.get_or_create(**pkvs)
@@ -79,11 +86,13 @@ class SyncDb:
 
         if changed: 
             obj.save()
-            print(f'updated:{obj}')
+            Print.log(f'updated:{obj}')
+
+        return changed
 
     def _save_artifact(self, dct:dict[str,Any]):
         if 'uid' not in dct or not dct['uid']:
-            return
+            return None
 
         dct['typ'] = self.pt.ID_TYPE
         pkvs = Artifact.make_pkeys(**dct)
@@ -93,13 +102,13 @@ class SyncDb:
         dct_stg = Util.pop_key(dct, 'stg')
         info_chgd = self._set_new_attr(obj, dct)
 
-        log = f'update {obj} '
+        log = f'update {obj}'
         if info_chgd:
-            log += '~inf'
+            log += ' inf~'
 
         if is_some(dct_stg):
             if self._set_stage(obj, dct_stg):
-                log += ' ~stg'
+                log += ' stg~'
                 info_chgd = True
 
         if info_chgd:
@@ -109,11 +118,12 @@ class SyncDb:
         if is_some(dct_rlt):
             rlt_chgd = self._set_relate(obj, dct_rlt)
             if rlt_chgd:
-                log += ' ~rlt'
+                log += ' rlt~'
                 rlt_chgd = True
 
         if info_chgd or rlt_chgd:
-            print(log)
+            return log
+        return None
 
     def _set_new_attr(self, obj:Artifact, dct:dict[str,Any]):
         changed = False
@@ -218,12 +228,6 @@ class SyncDb:
 
         return changed
     
-    def _get_db_mod(self, cls_typ:Any, pkv:dict[str,Any]):
-        dc = cls_typ.objects.filter(**pkv)
-        if len(dc) == 0:
-            return None
-        return dc[0]
-    
     def _v2_date_if_v_date(self, v:Any, v2:Any):
         if v2 is None: return None
         if not isinstance(v, date):
@@ -232,6 +236,15 @@ class SyncDb:
             return v2.date()
         return v2
 
+    def _value_ne(self, oldv, newv):
+        if oldv is None and newv is None: return False
+        if oldv is None or newv is None: return True
+        if isinstance(oldv, User):
+            if isinstance(newv, dict) and 'act' in newv:
+                new_acts = newv['act']
+                return oldv.act not in new_acts
+        return oldv != newv
+    
     def _get_diff_attr(self, obj1:Any, dct:dict[str,Any])->list[Any]:
         ''' without stg & rlt '''
         diff:list[Any] = []
@@ -239,10 +252,17 @@ class SyncDb:
             if hasattr(obj1, k):
                 old_v = get_val(getattr(obj1, k))
                 old_v = self._v2_date_if_v_date(v, old_v)
-                if old_v != v:
+                if self._value_ne(old_v, v):
                     diff.append(k)
         return diff
     
+    def _get_first_user(self, acts:list[str]):
+        dc = User.objects.filter(act__in=acts)
+        if len(dc) == 0:
+            return None
+        return dc[0]
+    
+
     def _set_obj_changed(self, obj:Any, kvs:dict[str, Any], diff:list[str]|None):
         really_changed = False
 
@@ -252,7 +272,7 @@ class SyncDb:
             v = kvs[k]
 
             if isinstance(v, dict) and 'act' in v:
-                v = self._get_db_mod(User, v)
+                v = self._get_first_user(v['act'])
             else:
                 old_v = self._v2_date_if_v_date(v, old_v)
             

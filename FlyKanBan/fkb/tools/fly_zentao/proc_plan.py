@@ -1,6 +1,6 @@
 from fkb.tools.util import Util
 from fkb.models import *
-from fkb.tools.proc_table import ProcChild
+from fkb.tools.sync_db.proc_table import ProcChild
 from fkb.tools.fly_zentao.proc_mixin import ProcMixin
 
 
@@ -19,13 +19,13 @@ class ProcPlan(ProcChild, ProcMixin):
         'productplans':'_has_Pl',
     }
 
-    TABLE_NAME = 'zt_productplan'
+    SQL_TABLE_NAME = 'zt_productplan'
     ID_TYPE = 'Pl'
+    SQL_AND_WHERE = '`end` >= "2023-01-01"'
+
     _rdrs = {}
 
-    def _load_rdrs(self):
-        if self._rdrs:
-            return
+    def before_sync(self):
         results = self.query_db_sql(f'select id, plan_ids from zt_product where deleted = "0"')
         for result in results:
             pdid = result[0]
@@ -41,7 +41,6 @@ class ProcPlan(ProcChild, ProcMixin):
         if self._null_dct_if_key_art_not_exist(dct, '_of_Pd'):
             return
 
-        self._load_rdrs()
         rdr = self._rdrs.get(dct['uid'], (None, None))
 
         self._chg_ttl(dct)

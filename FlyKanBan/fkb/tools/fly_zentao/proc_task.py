@@ -1,9 +1,6 @@
-
-from work_hours import WorkHours
-
-from fkb.tools.util import Util
 from fkb.models import *
-from fkb.tools.proc_table import ProcChild
+from fkb.tools.util import Util, Print
+from fkb.tools.sync_db.proc_table import ProcChild
 from fkb.tools.fly_zentao.proc_mixin import ProcMixin
 
 class ProcTask(ProcChild, ProcMixin):
@@ -15,8 +12,8 @@ class ProcTask(ProcChild, ProcMixin):
         'pri':'_pri',
         'status':'_stt',
 
-        'storyPoint':'pnt',
-        'estPoint':'pnt_est',
+        'storyPoint':'_pnt',
+        'estPoint':'_pnt_est',
 
         'openedDate':'crt_tim',
         'openedBy':'_crt_usr',
@@ -36,12 +33,12 @@ class ProcTask(ProcChild, ProcMixin):
         'finishedDate':'_dev_end_tim',
 
         # n choose 1 as dev_usr/rsp_usr
+        'finishedBy':'_fi_usr', 
         'realStartedBy':'_rs_usr',
         'assignedTo':'_to_usr',
-        'finishedBy':'_fi_usr', 
         # -
         
-        'lastPausedDate':'_psd_srt_time',
+        'lastPausedDate':'_psd_srt_tim',
         'pausedHr':'_psd_dur', # hour to timespan
 
         # == rel: == 
@@ -51,61 +48,62 @@ class ProcTask(ProcChild, ProcMixin):
         'parent':'_of_T',
     }
 
-    TABLE_NAME = 'zt_task'
-    ID_START_FROM = 6879
+    SQL_TABLE_NAME = 'zt_task'
+    SQL_ID_START_FROM = 6879
     ID_TYPE = 'T'
     STT_KV = {
         'wait':'-AP',
         'doing':'KF-',
+        'pause':'KFX',
         'done':'-KF',
-        'pause':'-ZT',
         'cancel':'-QX',
         'closed':'-GB',
     }
-
-    wh = WorkHours()
-
-    def _calc_dur_hr(self, start_dt, end_dt, psd_hr):
-        if not start_dt or not end_dt:
-            return 0
-        dv_dur = self.wh.calc(start_dt, end_dt)
-        dv_dur -= to_int(psd_hr)
-        return dv_dur
 
     def change_dict(self, dct):
         if self._null_dct_if_key_art_not_exist(dct, '_of_It'):
             return
         if self._null_dct_if_key_art_not_exist(dct, '_of_S'):
             return
-        
+
         self._chg_pri(dct)
+        self._chg_pnt(dct)
         self._chg_stt(dct, self.STT_KV)
         self._chg_usr(dct, 'crt_usr')
 
-        cls_tim = self._chg_key(dct, 'cls_tim', 'ccl_tim', 'cls_tim')
-        cls_usr = self._chg_usr(dct, 'cls_usr', 'ccl_usr', 'cls_usr')
-        rsp_usr = self._chg_usr(dct, 'rsp_usr', 'rs_usr', 'fi_usr', 'to_usr')
+        tst_end_tim = Util.get_key(dct, '_cls_tim')
+        tst_usr = self._pop_usr(dct, 'cls_usr', pop=False)
+
+        self._chg_key(dct, 'cls_tim', 'ccl_tim', 'cls_tim')
+        self._chg_usr(dct, 'cls_usr', 'ccl_usr', 'cls_usr')
+        rsp_usr = self._chg_usr(dct, 'rsp_usr', 'fi_usr', 'rs_usr', 'to_usr')
 
         dev_dur_hr_est = Util.pop_key(dct, '_dev_dur_est')
         dev_srt_tim = Util.pop_key(dct, '_dev_srt_tim')
         dev_end_tim = Util.pop_key(dct, '_dev_end_tim')
-        psd_srt_time = Util.pop_key(dct, '_psd_srt_time')
+        psd_srt_tim = Util.pop_key(dct, '_psd_srt_time')
         psd_dur_hr = Util.pop_key(dct, '_psd_dur')
-        dv_dur_hr = self._calc_dur_hr(dev_srt_tim, dev_end_tim, psd_dur_hr)
-        
+        dv_dur_hr = Util.calc_work_dur(dev_srt_tim, dev_end_tim, psd_dur_hr)
+        # 从开发完成到 测试完成，就是测试时长
+        tst_dur_hr = Util.calc_work_dur(dev_end_tim, tst_end_tim)
+
         dct['stg'] = {
-            # 创建时间 即为 评审时间
-            'rev_end_tim':dct['crt_tim'], 
+            # 任务的开发和测试时间是重点。
             'dev_dur_est':self._hr2dur(dev_dur_hr_est),
             'dev_srt_tim':dev_srt_tim,
             'dev_end_tim':dev_end_tim,
-            'dev_dur':self._hr2dur(dv_dur_hr),
+            'dev_dur':dv_dur_hr,
             'dev_usr':rsp_usr,
-            'psd_srt_time':psd_srt_time,
+
+            # 最后一次开始暂停时间。结束时间未知。
+            'psd_srt_tim':psd_srt_tim,
             'psd_dur':self._hr2dur(psd_dur_hr),
-            # 关闭时间 即为 验收时间
-            'acc_end_tim':cls_tim,
-            'acc_usr':cls_usr,
+            
+            # 任务 测试完成，就算完成了
+            'tst_srt_tim':dev_end_tim,
+            'tst_end_tim':tst_end_tim,
+            'tst_usr':tst_usr,
+            'tst_dur':tst_dur_hr,
         }
 
         self._chg_rlt_of(dct, '_of_It', None)
@@ -115,3 +113,4 @@ class ProcTask(ProcChild, ProcMixin):
 
     def relation_incharge(self, obj, rlt) -> bool:
         return self.relation_incharge_B(obj, rlt)
+            

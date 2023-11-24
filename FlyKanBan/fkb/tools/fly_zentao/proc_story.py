@@ -1,14 +1,15 @@
 from fkb.tools.util import Util
 from fkb.models import *
-from fkb.tools.proc_table import ProcChild
+from fkb.tools.sync_db.proc_table import ProcChild
 from fkb.tools.fly_zentao.proc_mixin import ProcMixin
+from fkb.tools.fly_zentao.proc_task import ProcTask
 
 class ProcStory(ProcChild, ProcMixin):
     KEY_MAP = {
         # == inf: ==
         'id':'uid',
         'title':'_ttl',
-        'estPts':'pnt_est',
+        'estPts':'_pnt_est',
         'version':'_ver',
         'stage':'_stt',
         'pri':'_pri',
@@ -28,8 +29,7 @@ class ProcStory(ProcChild, ProcMixin):
         'product':'_of_Pd',
     }
 
-    TABLE_NAME = 'zt_story'
-    ID_START_FROM = 4189 # >= 2023/1/1
+    SQL_TABLE_NAME = 'zt_story'
     ID_TYPE = 'S'
 
     STT_KV = {
@@ -46,6 +46,18 @@ class ProcStory(ProcChild, ProcMixin):
         'closed':'-GB', # 已关闭
     }
 
+    def db_sql(self, limit):
+        sql = f'select story from zt_task where \
+id >= {ProcTask.SQL_ID_START_FROM} and story > 0 \
+and `deleted` = \'0\' group by story{limit}'
+        stry_ids = self.query_db_sql(sql)
+        stid_lst = []
+        if stry_ids:
+            for str in stry_ids:
+                stid_lst.append(f'{str[0]}')
+            self.SQL_IDS_IN = ','.join(stid_lst)
+        return super().db_sql(limit)
+    
     _st_pls = None # story -> (plan, order)
     _st_its = None # story -> (itor, orddr)
 
@@ -70,10 +82,7 @@ class ProcStory(ProcChild, ProcMixin):
 
         return ret
     
-    def _load_rdrs(self):
-        if is_some(self._st_pls):
-            return
-        
+    def before_sync(self):
         results = self.query_db_sql(f'select id, storyOrder from zt_productplan where deleted = "0"')
         self._st_pls = self._rearrange_ids(results)
 
@@ -86,19 +95,18 @@ class ProcStory(ProcChild, ProcMixin):
         if self._null_dct_if_key_art_not_exist(dct, '_of_Pd'):
             return
 
-        self._load_rdrs()
-
+        self._chg_pnt(dct)
         self._chg_pri(dct)
         self._chg_ttl(dct)
         self._chg_stt(dct, self.STT_KV)
         self._chg_usr(dct, 'crt_usr')
         self._chg_usr(dct, 'cls_usr')
-        self._chg_usr(dct, 'rev_usr')
-        self._chg_usr(dct, 'acc_usr')
 
         dct['stg'] = {
             'rev_end_tim' : Util.pop_key(dct, '_rev_end_tim'),
+            'rev_usr' : self._chg_usr(dct, 'rev_usr'),
             'acc_end_tim' : Util.pop_key(dct, '_acc_end_tim'),
+            'acc_usr' : self._chg_usr(dct, 'acc_usr'),
             'ver_lst' : Util.pop_key(dct, '_ver'),
         }
         

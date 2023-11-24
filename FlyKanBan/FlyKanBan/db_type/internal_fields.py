@@ -6,13 +6,23 @@ from django.db import models
 class Index(models.Index):
 	def __init__(self, *args:Any, **kwargs:Any):
 		if args:
-			if 'fields' not in kwargs:
-				kwargs['fields'] = args
-			if 'name' not in kwargs:
-				kwargs['name'] = f'idx_{"_".join(args)}'
-			super().__init__(**kwargs)
+			fields = args
+		elif 'fields' in kwargs:
+			fields = kwargs['fields']
 		else:
-			super().__init__(*args, **kwargs)
+			raise Exception('Index need fields')
+		
+		kwargs['fields'] = fields
+		fields = "_".join(fields)
+
+		name = ''
+		if 'add' in kwargs:
+			add = kwargs['add']
+			name = f'_{add}'
+			del kwargs['add']
+
+		kwargs['name'] = f'idx_{fields}{name}'
+		super().__init__(**kwargs)
 
 def nullable(super:Any, *args:Any, **kwargs:Any):
 	kwargs['null'] = True
@@ -99,10 +109,23 @@ class KND(models.ForeignKey):
 		kwargs['on_delete'] = models.DO_NOTHING
 		nullable(super(), **kwargs)
 
+class KD(models.ForeignKey):
+	''' 
+	K: Foreign Key
+	D: DO_NOTHING
+	'''
+	def __init__(self, to:type[Any]|str, verbose_name:str, related_name:str, 
+			  **kwargs:Any):
+		kwargs['to'] = to
+		kwargs['verbose_name'] = verbose_name
+		kwargs['related_name'] = related_name
+		kwargs['on_delete'] = models.DO_NOTHING
+		super().__init__(**kwargs)
+
 class KC(models.ForeignKey):
 	''' 
 	K: Foreign Key
-	C: CASCADE
+	C: CASCADE 一并删除子
 	'''
 	def __init__(self, to:type[Any]|str, verbose_name:str, related_name:str, 
 			  **kwargs:Any):
@@ -142,18 +165,43 @@ class KUserND(models.ForeignKey):
 	N: Nullable
 	D: DO_NOTHING
 	'''
-	def __init__(self, verbose_name:str, related_name:str, *arg:Any, **kwargs:Any):
+	def __init__(self, verbose_name:str, *arg:Any, **kwargs:Any):
+		if 'add' in kwargs:
+			add = '_' + kwargs['add'] 
+			del kwargs['add']
+		else:
+			add = ''
 		kwargs['verbose_name'] = verbose_name
-		kwargs['related_name'] = related_name
+		kwargs['related_name'] = KUserND._name2col(verbose_name, add)
 		kwargs['to'] = 'User'
 		kwargs['on_delete'] = models.DO_NOTHING
 		nullable(super(), *arg, **kwargs) 
 
+	NAMES = {
+		'创建':'crt',
+		'关闭':'cls',
+		'负责':'rsp',
+		'评审':'rev',
+		'安排':'arr',
+		'开发':'dev',
+		'暂停':'psd',
+		'测试':'tst',
+		'验收':'acc',
+		'发布':'pub',
+	}
+
+	@classmethod
+	def _name2col(cls, name:str, addon='')->str:
+		n = name[:2]
+		strn = cls.NAMES[n] if n in cls.NAMES else n
+		return f'{strn}_usr{addon}'
+
+	
 
 class F1To1CN(models.OneToOneField):
 	'''
 	F: Field 1 To 1
-	C: Cascade
+	C: Cascade 一并删除子
 	N: Nullable
 	'''
 	def __init__(self, to:type[Any]|str, **kwargs:Any):
@@ -166,8 +214,7 @@ class F1To1CN(models.OneToOneField):
 class F1To1C(models.OneToOneField):
 	'''
 	F: Field 1 To 1
-	C: Cascade
-	N: Nullable
+	C: Cascade 一并删除子
 	'''
 	def __init__(self, to:type[Any]|str, **kwargs:Any):
 		kwargs['to'] = to

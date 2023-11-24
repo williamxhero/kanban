@@ -1,6 +1,7 @@
+from datetime import timedelta
 from fkb.models import *
 from fkb.tools.util import Util
-from fkb.tools.proc_table import ProcChild
+from fkb.tools.sync_db.proc_table import ProcChild
 from fkb.tools.fly_zentao.proc_mixin import ProcMixin
 
 class ProcItor(ProcChild, ProcMixin):
@@ -24,6 +25,7 @@ class ProcItor(ProcChild, ProcMixin):
         # == rel: ==
         # 只处理 不同类-父 和 同类-子
         't3.`plan`':'_of_Pl',
+        't3.`product`':'_of_Pd',
         't1.`projects`':'_has_It',
     }
 
@@ -39,7 +41,7 @@ class ProcItor(ProcChild, ProcMixin):
             # for other version, zentao only has date frame.
             # so only keep : uid, ver, stt, date
             pop_keys = ('ttl', 'sht', '_crt_usr', '_pri',
-                        '_rsp_usr', 'rdr', '_of_Pl', '_has_It') 
+                        '_rsp_usr', 'rdr', '_of_Pl', '_of_Pd', '_has_It') 
             Util.pop_key(dct, *pop_keys)
         else:
             self._chg_pri(dct)
@@ -49,18 +51,25 @@ class ProcItor(ProcChild, ProcMixin):
 
             rdr = Util.pop_key(dct, '_rdr')
             self._chg_rlt_of(dct, '_of_Pl', rdr)
+            self._chg_rlt_of(dct, '_of_Pd', rdr)
             self._chg_rlt_has(dct, '_has_It')
 
-    def db_sql(self):
+    synced = False
+
+    def before_sync(self):
+        self.synced = Artifact.objects.filter(typ='It').exists()
+
+    def db_sql(self, limit):
+        days_ago = date.today() - timedelta(days=14*4)
+        end_dt = days_ago.strftime('%Y-%m-%d') if self.synced else '2023-01-01'
         db_keys_str = ','.join(self.KEY_MAP.keys())
         sql = f'\
 select {db_keys_str} \
 from `zt_project` t1 \
 inner join `zt_projectcount` t2 on t1.`id` = t2.`project` \
 inner join `zt_projectproduct` t3 on t1.`id` = t3.`project` \
-where t3.`plan`> 0 and t1.`deleted`="0" \
-order by t1.`id`, t2.`projectCount` asc \
-limit {self.LIMIT_ONCE} offset {self.query_offset}'
+where t3.`plan`> 0 and t1.`deleted`="0" and t2.`end` >= "{end_dt}" \
+order by t1.`id`, t2.`projectCount` asc{limit}'
         return sql
     
     def relation_incharge(self, obj, rlt) -> bool:

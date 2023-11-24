@@ -1,20 +1,23 @@
 from datetime import timedelta
-import itertools
 from typing import Any
-from fkb.tools.util import Util
+import itertools
 
+from fkb.tools.util import Util, Print
 from fkb.models import *
 
 class ProcTable(object):
     DB_TYPE:str = 'Artifact'
     ID_TYPE:str = 'X'
     KEY_MAP:dict[str,str] = {'id':'uid'}
-    HAS_DELETE:bool = True
-    TABLE_NAME:str = 'table_from'
-    LIMIT_ONCE:int = 500
-    ID_START_FROM = 0
-    query_offset:int = 0
     query:Any = None
+
+    sql_offset:int = 0
+    SQL_DELETED:bool = True
+    SQL_TABLE_NAME:str = 'table_from'
+    SQL_LIMIT:int = 500
+    SQL_ID_START_FROM = 0
+    SQL_IDS_IN = None
+    SQL_AND_WHERE = None
 
     def _hr2dur(self, val:Any):
         ''' hours to duration(timedelta) '''
@@ -44,18 +47,17 @@ class ProcTable(object):
         dct['ttl'] = ttl
         return ttl
 
-    def _pop_usr(self, dct:dict[str,Any], *keys:Any):
-        first_val = None
+    def _pop_usr(self, dct:dict[str,Any], *keys:Any, pop=True):
+        usrs = []
         for key in keys:
             _key = f'_{key}'
-            act = Util.pop_key(dct, _key)
+            act = Util.pop_key(dct, _key) if pop else Util.get_key(dct, _key)
             if act is None or act == '':
                 continue
-            if first_val is None:
-                first_val = act
+            usrs.append(act)
 
-        if first_val is None: return None
-        return {'act':first_val}
+        if len(usrs) == 0 : return None
+        return {'act':usrs}
     
     def _chg_usr(self, dct:dict[str,Any], key:str, *keys:Any):
         if len(keys) == 0:
@@ -87,17 +89,18 @@ class ProcTable(object):
         whr = whr[:-5]
         return whr
 
-    def db_sql(self):
+    def db_sql(self, limit):
         col_names = list(self.KEY_MAP.keys())
         db_keys = [f'`{key}`' for key in col_names]
         db_keys_str = ','.join(db_keys)
         id_key = db_keys[0]
 
-        whr_id = f'{id_key}>={self.ID_START_FROM}' if self.ID_START_FROM else None
-        whr_del = '`deleted`="0"' if self.HAS_DELETE else None
-        where = self.sql_where(whr_del, whr_id)
-        limit = f' limit {self.LIMIT_ONCE} offset {self.query_offset}' if self.LIMIT_ONCE else ''
-        sql = f'select {db_keys_str} from `{self.TABLE_NAME}` {where} order by {id_key} asc{limit}'
+        whr_id = f'{id_key}>={self.SQL_ID_START_FROM}' if self.SQL_ID_START_FROM else None
+        if whr_id is None:
+            whr_id = f'{id_key} in ({self.SQL_IDS_IN})' if self.SQL_IDS_IN else None
+        whr_del = '`deleted`="0"' if self.SQL_DELETED else None
+        where = self.sql_where(whr_del, whr_id, self.SQL_AND_WHERE)
+        sql = f'select {db_keys_str} from `{self.SQL_TABLE_NAME}` {where} order by {id_key} asc{limit}'
         return sql
     
     def query_db_sql(self, sql:str):
@@ -109,11 +112,12 @@ class ProcTable(object):
                 return []
             return result
         except Exception as e:
-            print(e)
+            Print.log(e)
             return []
 
     def query_db(self)->list[Any]:
-        sql = self.db_sql()
+        limit = f' limit {self.SQL_LIMIT} offset {self.sql_offset}' if self.SQL_LIMIT else ''
+        sql = self.db_sql(limit)
         return self.query_db_sql(sql)
 
     def change_dict(self, dct:dict[str,Any])->None:
@@ -122,6 +126,9 @@ class ProcTable(object):
     def relation_incharge(self, obj, rlt)->bool:
         ...
 
+    def before_sync(self):
+        ...
+        
 class ProcChild(ProcTable):
     
     def _get_type_ids(self, dct, keys:str, uid_is_list:bool):

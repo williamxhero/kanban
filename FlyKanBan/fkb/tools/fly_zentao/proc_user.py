@@ -1,10 +1,10 @@
 from fkb.models import *
-from fkb.tools.proc_table import ProcTable
+from fkb.tools.sync_db.proc_table import ProcTable
 
 class ProcUser(ProcTable):
     
     DB_TYPE = 'User'
-    TABLE_NAME = 'zt_user'
+    SQL_TABLE_NAME = 'zt_user'
 
     KEY_MAP = {
         'account':'act',
