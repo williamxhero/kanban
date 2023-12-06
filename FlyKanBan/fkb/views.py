@@ -47,10 +47,12 @@ def its(request:Any, pl_id:int, str_args:str):
     return _render(request, get_data, "fkb/its.html", **kvargs)
 
 
-def kb(request:Any, typ:str, id:int):
+def kb(request:Any, typ:str, idstr:str):
+    ids = idstr.split(',')
+    ids = [int(id) for id in ids]
     from fkb.controls.kb import get_data
     kvargs = {
         'typ':typ,
-        'id':id,
+        'ids':ids,
         }    
     return _render(request, get_data, "fkb/kb.html", **kvargs)

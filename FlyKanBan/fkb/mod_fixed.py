@@ -33,7 +33,7 @@ class User(models.Model):
 		return super().__eq__(__value)
 	
 	def __str__(self):
-		return f'[U]{self.nam}({self.act})'
+		return f'{self.nam}({self.act})'
 	
 	def __hash__(self) -> int:
 		return self.act.__hash__()

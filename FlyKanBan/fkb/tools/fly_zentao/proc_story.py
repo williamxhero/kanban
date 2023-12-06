@@ -89,10 +89,33 @@ and `deleted` = \'0\' group by story{limit}'
         results = self.query_db_sql(f'select id, storyOrder from zt_project where deleted = "0"')
         self._st_its = self._rearrange_ids(results)
     
+        results =  self.query_db_sql(f'select id, plan from zt_story where deleted = "0" and product > 0 and plan > 0')
+        for st, pl in results:
+            pl_st = self._st_pls.setdefault(st, {})
+            pls = pl.split(',')
+            for pl in pls:
+                pl_st[int(pl)] = 0
+
+        pass
 
     def change_dict(self, dct):
         # 必须有归属产品
         if self._null_dct_if_key_art_not_exist(dct, '_of_Pd'):
+            return 
+        
+        # 必须有所属计划：
+        uid = dct['uid']
+        pls = self._st_pls.get(uid,{})
+        pl_exist = False
+        for pl, rdr in pls.items():
+            if Artifact.objects.filter(typ='Pl', uid=pl).exists():
+                pl_exist = True
+                self._append_rlt(dct, True, 'Pl', pl, rdr)
+            else:
+                pass
+
+        if not pl_exist:
+            del dct['uid']
             return
 
         self._chg_pnt(dct)
@@ -112,14 +135,8 @@ and `deleted` = \'0\' group by story{limit}'
         
         self._chg_rlt_of(dct, '_of_Pd', None)
 
-        # 所属 计划 和 迭代 (必须是存在的):
-        sid = dct['uid']
-        pls = self._st_pls.get(sid,{})
-        for pl, rdr in pls.items():
-            if Artifact.objects.filter(typ='Pl', uid=pl).exists():
-                self._append_rlt(dct, True, 'Pl', pl, rdr)
-
-        its = self._st_its.get(sid,{})
+        # 所属迭代 (可以没有，有必须是存在的):
+        its = self._st_its.get(uid,{})
         for it, rdr in its.items():
             if Artifact.objects.filter(typ='It', uid=it).exists():
                 self._append_rlt(dct, True, 'It', it, rdr)

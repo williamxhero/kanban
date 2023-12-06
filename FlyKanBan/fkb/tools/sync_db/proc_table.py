@@ -199,7 +199,9 @@ class ProcChild(ProcTable):
         rdr_int = to_int(rdr)
         if is_some(rdr):
             rlt_dct['rdr'] = rdr_int
-        dct['rlt'].append(rlt_dct)
+        
+        rls = dct['rlt']
+        rls.append(rlt_dct)
 
 
     def _null_dct_if_key_art_not_exist(self, dct, key:str):

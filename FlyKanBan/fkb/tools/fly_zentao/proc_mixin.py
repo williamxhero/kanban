@@ -10,9 +10,9 @@ class ProcMixin(object):
         
         if is_some(pnt):
             int_pnt = float(pnt)
-            if int_pnt < 0.000000001: # 9x0
+            if 0 < int_pnt < 0.00000001: # n/a
                 int_pnt = -1
-            dct[key[1:]] = pnt
+            dct[key[1:]] = int_pnt
 
         if key == '_pnt':
             self._chg_pnt(dct, key='_pnt_est')

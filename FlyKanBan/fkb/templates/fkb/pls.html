@@ -25,15 +25,11 @@
     <el-table-column prop="name" label="产品" width="420px">
     <template #default="scope">
       <el-breadcrumb separator="/" v-if="scope.row.is_pd">
-        <el-breadcrumb-item>
-        <a href="{%url 'pds' ongoing%}">
-          <el-text size="small" type="info"> .. </el-text>
-        </a>
-        </el-breadcrumb-item>
+        <el-breadcrumb-item><a href="{%url 'pds' ongoing%}">..</a></el-breadcrumb-item>
 
         <el-breadcrumb-item>
-        <el-text size="small" type="info">{%vue 'scope.row.id'%}</el-text>&nbsp;
-        {%vue 'scope.row.name'%}  
+        <el-text size="small" type="info">{%vue 'scope.row.id'%}</el-text>
+        &nbsp;{%vue 'scope.row.name'%}
         </el-breadcrumb-item>
       </el-breadcrumb>
       

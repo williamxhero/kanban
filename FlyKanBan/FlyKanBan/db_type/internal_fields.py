@@ -34,6 +34,13 @@ def notnull(super:Any, *args:Any, **kwargs:Any):
 	kwargs['blank'] = False
 	super.__init__(*args, **kwargs)
 
+class FUBigInt(models.PositiveBigIntegerField):
+	''' F: Field
+	U: unsigned
+	'''
+	def __init__(self, *args:Any, **kwargs:Any):
+		kwargs['default'] = 0
+		super().__init__(*args, **kwargs)
 
 class FUInt(models.PositiveIntegerField):
 	''' F: Field '''

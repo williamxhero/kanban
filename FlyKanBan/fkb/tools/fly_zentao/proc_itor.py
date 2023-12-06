@@ -1,4 +1,5 @@
 from datetime import timedelta
+
 from fkb.models import *
 from fkb.tools.util import Util
 from fkb.tools.sync_db.proc_table import ProcChild
@@ -19,7 +20,7 @@ class ProcItor(ProcChild, ProcMixin):
 
         # t2
         't2.`begin`':'crt_tim',
-        't2.`end`':'cls_tim',
+        't2.`end`':'cls_tim', 
         't2.`projectCount`':'ver',
         
         # == rel: ==
@@ -30,34 +31,37 @@ class ProcItor(ProcChild, ProcMixin):
     }
 
     ID_TYPE = 'It'
-    
+
     def change_dict(self, dct):
         if self._null_dct_if_key_art_not_exist(dct, '_of_Pl'):
             return
-
-        self._chg_stt_by_date(dct, 'crt_tim', 'cls_tim')
-
-        if dct['ver'] > 0:
-            # for other version, zentao only has date frame.
-            # so only keep : uid, ver, stt, date
-            pop_keys = ('ttl', 'sht', '_crt_usr', '_pri',
-                        '_rsp_usr', 'rdr', '_of_Pl', '_of_Pd', '_has_It') 
-            Util.pop_key(dct, *pop_keys)
+    
+        # 数据库已有，不更新crt_tim, cls_tim, stt (固定下来不动了)
+        if f"It#{dct['uid']}/{dct['ver']}" in self.uids:
+            del dct['cls_tim']
+            del dct['crt_tim']
         else:
-            self._chg_pri(dct)
-            self._chg_ttl_sht(dct)
-            self._chg_usr(dct, 'rsp_usr')
-            self._chg_usr(dct, 'crt_usr')
+            self._chg_stt_by_date(dct, 'crt_tim', 'cls_tim')
 
-            rdr = Util.pop_key(dct, '_rdr')
-            self._chg_rlt_of(dct, '_of_Pl', rdr)
-            self._chg_rlt_of(dct, '_of_Pd', rdr)
-            self._chg_rlt_has(dct, '_has_It')
+        self._chg_pri(dct)
+        self._chg_ttl_sht(dct)
+        self._chg_usr(dct, 'rsp_usr')
+        self._chg_usr(dct, 'crt_usr')
+
+        rdr = Util.pop_key(dct, '_rdr')
+        self._chg_rlt_of(dct, '_of_Pl', rdr)
+        self._chg_rlt_of(dct, '_of_Pd', rdr)
+        self._chg_rlt_has(dct, '_has_It')
+
 
     synced = False
+    uids = set()
 
     def before_sync(self):
-        self.synced = Artifact.objects.filter(typ='It').exists()
+        its = Artifact.objects.filter(typ='It').all()
+        self.synced = len(its) > 0
+        for it in its:
+            self.uids.add(str(it))
 
     def db_sql(self, limit):
         days_ago = date.today() - timedelta(days=14*4)

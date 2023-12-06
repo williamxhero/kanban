@@ -1,6 +1,8 @@
 # 通过 fkb 库中的表，计算出额外信息，如 团队速度，计划完成率 等等
 from datetime import datetime, timedelta
 
+from work_hours import WorkHours
+
 from fkb.tools.util import Util, Print
 from fkb.controls.util import load_children
 from fkb.models import *
@@ -24,7 +26,7 @@ def _calc_sty_pnt(sty, tsks, chgd):
     chgd = _sign_if_ne(sty, 'pnt', pnt) or chgd
     return chgd
 
-class CalcData():
+class CalcData:
     _last_dt = datetime(9999,12,31)
     _frst_dt = datetime(1,1,1)
 
@@ -81,6 +83,7 @@ class CalcData():
         return chgd
     
     def _stt_5(self, stg, tsks, chgd):
+
         # last dev end time
         tsk = sorted(tsks, key=lambda tsk:tsk.stg.dev_end_tim)[-1]
         # dev_end_tim / 开发完成时间|待测试(最后一次) 
@@ -163,11 +166,11 @@ class CalcData():
         if hasattr(stry, '_has_Ts'):
             tasks = getattr(stry, '_has_Ts')
         else:
-            tasks = load_children([stry], 'CN', typ='T')
+            tasks = load_children([stry], 'CN', typ='T', no_stts='-QX')
         return tasks
     
     def calc_sty_stg(self, stry:Artifact):
-        if stry.stt == '-QX': return False
+        #if stry.stt == '-QX': return False
 
         stg, chgd = ArtStage.objects.get_or_create(art=stry)
         if not stg: return False
@@ -208,15 +211,15 @@ class CalcData():
             break
 
         if chgd:
+            stry.save()
             stg.save()
             return Print.log(f'{stry} stg_calc~')
 
         return Print.dot()
 
-
     def calc_sty_stgs(self):
         Print.log('Calc sty stgs...')
-        stys = Artifact.objects.filter(typ='S').all()
+        stys = Artifact.objects.filter(typ='S').exclude(stt='-QX').all()
         for sty in stys:
             self.calc_sty_stg(sty)
         Print.log('Done.')
@@ -319,34 +322,61 @@ class CalcData():
         if s_chgd: log += f'{sty} prf~'
         if log: return Print.log(log)
         return Print.dot()
-        
+ 
+    def _make_sure_ver0(self, its):
+        if not its: return its
+        its.sort(key=lambda it:it.ver)
+        it0 = its[0]
+        if it0.ver == 0: return its
 
+        # last info to ver0
+        itn = its[-1]
+        it0 = Artifact.objects.create(
+            typ=itn.typ,
+            uid=itn.uid,
+            ver=0,
+            sht=itn.sht,
+            ttl=itn.ttl,
+            rsp_usr=itn.rsp_usr,
+            pri = itn.pri,
+        )
+        it0.save()
+        its.insert(0, it0)
+        return its
 
     def calc_itor_tim(self):
         ''' move last cls_tim to next ver crt_tim'''
-
         Print.log('Reset itor cls_tim ...')
         its = Artifact.objects.filter(typ='It').all()
         its_by_uid = {}
         for it in its:
-            if it.cls_tim < datetime(year=2023, month=1, day=1):
-                it.delete()
-                it.save()
-                continue
             if it.uid not in its_by_uid:
                 its_by_uid[it.uid] = []
             its_by_uid[it.uid].append(it)
 
         one_day = timedelta(days=1)
+        wh = WorkHours()
+
         for its in its_by_uid.values():
-            its.sort(key=lambda it:it.ver)
+            its = self._make_sure_ver0(its)
             for idx in range(len(its)-1):
                 it = its[idx]
                 nxt = its[idx+1]
                 end_tim = nxt.crt_tim - one_day
-                if it.cls_tim.date() != end_tim.date():
+                
+                chgd = False
+                if not it.cls_tim or it.cls_tim.date() != end_tim.date():
                     end_tim_str= end_tim.strftime('%Y-%m-%d 23:59:59')
                     it.cls_tim = datetime.strptime(end_tim_str, '%Y-%m-%d %H:%M:%S')
+                    self._chg_stt(it)
+                    chgd = True
+
+                if it.crt_tim is None:
+                    dt = wh.add_workdays(it.cls_tim, -10)
+                    it.crt_tim = dt.date()
+                    chgd = True
+
+                if chgd:
                     it.save()
                     Print.log(f'{it} itor_tim~')
                 else:
@@ -355,7 +385,18 @@ class CalcData():
         Print.log('Done.')            
 
 
+    def _chg_stt(self, art):
+        tdy_dt = date.today()
 
+        if art.cls_tim.date() < tdy_dt:
+            art.stt = '-GB' # 已结束
+            return
+
+        if art.crt_tim.date() > tdy_dt:
+            art.stt  = '-AP' # 待开始
+            return
+
+        art.stt = 'KF-' # 进行中
 
 
 '''

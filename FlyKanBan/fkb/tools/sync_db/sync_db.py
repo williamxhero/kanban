@@ -70,10 +70,10 @@ class SyncDb:
 
     def _save_dict(self, dct:dict[str,Any]):
         log = None
-        if self.pt.DB_TYPE == 'User':
-            log = self._save_user(dct)
-        elif self.pt.DB_TYPE == 'Artifact':
+        if self.pt.DB_TYPE == 'Artifact':
             log = self._save_artifact(dct)
+        elif self.pt.DB_TYPE == 'User':
+            log = self._save_user(dct)
         return log
 
     def _save_user(self, dct:dict[str,Any]):
@@ -90,40 +90,48 @@ class SyncDb:
 
         return changed
 
+    def _mv_attr_if_has(self, dct_to, dct_from, key:str):
+        if key not in dct_from: return
+        dct_to['key'] = dct_from[key]
+        del dct_from[key]
+
     def _save_artifact(self, dct:dict[str,Any]):
         if 'uid' not in dct or not dct['uid']:
             return None
 
         dct['typ'] = self.pt.ID_TYPE
         pkvs = Artifact.make_pkeys(**dct)
-        obj, _ = Artifact.objects.get_or_create(**pkvs)
-
-        dct_rlt = Util.pop_key(dct, 'rlt')
+        if not pkvs: return None
+        
         dct_stg = Util.pop_key(dct, 'stg')
-        info_chgd = self._set_new_attr(obj, dct)
+        dct_rlt = Util.pop_key(dct, 'rlt')
+        keys = Artifact.make_pkeys(**dct)
+        if not keys: return None
 
-        log = f'update {obj}'
+        obj, _ = Artifact.objects.get_or_create(**keys)
+
+        log = f'update '
+
+        info_chgd = self._set_new_attr(obj, dct)
         if info_chgd:
-            log += ' inf~'
+            log += f'{obj} inf~ '
 
         if is_some(dct_stg):
             if self._set_stage(obj, dct_stg):
-                log += ' stg~'
+                log += 'stg~ '
                 info_chgd = True
-
-        if info_chgd:
-            obj.save()
 
         rlt_chgd = False
         if is_some(dct_rlt):
             rlt_chgd = self._set_relate(obj, dct_rlt)
             if rlt_chgd:
-                log += ' rlt~'
+                log += 'rlt~ '
                 rlt_chgd = True
 
-        if info_chgd or rlt_chgd:
-            return log
-        return None
+        if info_chgd:
+            obj.save()
+
+        return log if info_chgd or rlt_chgd else None
 
     def _set_new_attr(self, obj:Artifact, dct:dict[str,Any]):
         changed = False
@@ -147,11 +155,14 @@ class SyncDb:
         
         return None
 
-    def _get_rel_ab(self, obj:Any, re:dict[str, Any]):
-        ''' if id is 0/''/None, returns None '''
-        obj_a = self._get_obj_ab(obj, re, True)
+    def _get_rel_ab(self, this_obj:Any, re:dict[str, Any]):
+        ''' if id is 0/''/None, returns None
+        otherwise, make sure both objects exists or pre-created,
+        then make the relation.
+        '''
+        obj_a = self._get_obj_ab(this_obj, re, True)
         if obj_a is None: return None, False
-        obj_b = self._get_obj_ab(obj, re, False)
+        obj_b = self._get_obj_ab(this_obj, re, False)
         if obj_b is None: return None, False
         
         rel, new_ent = Relation.objects.get_or_create(
@@ -168,17 +179,18 @@ class SyncDb:
         return rel, new_ent
 
     def _get_valid_rel(self, rel):
-        try:
-            arta = rel.art_a
-            artb = rel.art_b
-        except:
-            return None
-        
+        if not hasattr(rel, 'art_a') or rel.art_a is None: return None
+        if not hasattr(rel, 'art_b') or rel.art_b is None: return None
         return rel
 
     def _set_relate(self, obj:Artifact, new_rls:list[dict[str,Any]]):
         old_rls_chgd = set()
         rlt_changed = False
+
+        if obj.ver > 0:
+            v0keys = Artifact.make_pkeys(typ=obj.typ, uid=obj.uid)
+            if v0keys:
+                obj, _ = Artifact.objects.get_or_create(**v0keys)
 
         rlts = Relation.objects.filter(Q(art_a=obj)|Q(art_b=obj)).all()
         if len(rlts) > 0:

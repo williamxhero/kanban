@@ -45,20 +45,32 @@ html,body{
     color:gray;
     text-decoration:line-through;
 }
-.task{
-    font-size: 18px;
+.task-box{
+    width: 480px;
+    margin: 1px;
+    padding: 0px 5px 5px 5px;
 }
 
+html.dark .el-card{--el-card-bg-color:black;}
+.el-card__body{padding: 0px;}
+.task{font-size: 18px;}
 .tsk_uid{
     display:inline-block;
     font-size: xx-small;
 }
-.tsk_usr{
-
-}
-
+.tsk_usr{}
 .tsk_pts{
     display:inline-block;
     font-size: xx-small;
     color:rgb(48, 79, 79);   
 }
+.tltp{
+    width: 100px;
+    float:left;
+    color:lightgray;
+}
+.tltp_l{
+    display:flex;
+    justify-content: space-between;
+}
+#tltp_v{font-weight: bolder;}

@@ -1,7 +1,6 @@
 from typing import Any
 
 from FlyKanBan.db_type.internal_fields import *
-from FlyKanBan.db_type.version4_field import FVer
 
 from fkb.mod_type import *
 from fkb.mod_calc import *
@@ -84,7 +83,7 @@ class ArtStage(models.Model):
 
 	ddl_tim = FDateTimeN('截止(deadline)时间')
 	
-	ver_lst = FVer('版本(最新)')
+	ver_lst = FUBigInt('版本(最新)')
 
 	class Meta():
 		indexes = [
@@ -135,7 +134,7 @@ class Artifact(models.Model):
 	# 自身属性：
 	typ = FStt('类型', ARTTYPE, 'T')
 	uid = FUInt('主库ID') # mostly is remote db id
-	ver = FVer('版本(当前)') # 用来索引的ver。如果不用来索引，使用 stg.ver_lst
+	ver = FUBigInt('版本(当前)') # 用来索引的ver。如果不用来索引，使用 stg.ver_lst
 
 	stt = FStt('状态', STATUS, '-XJ')
 	sht = FChar32N('简称')
@@ -173,14 +172,14 @@ class Artifact(models.Model):
 		]
 
 	@classmethod
-	def make_pkeys(cls, typ, uid, ver='0', **kwargs)->dict[str,Any]|None:
+	def make_pkeys(cls, typ, uid, ver=0, **kwargs)->dict[str,Any]|None:
 		if typ is None: return None
 		if uid is None: return None
 		ret = { 'typ':typ, 'uid': uid, 'ver':ver}
 		return ret
 
 	def __str__(self):
-		return f'[A]{self.typ}#{self.uid}/{self.ver}'
+		return f'{self.typ}#{self.uid}/{self.ver}'
 	
 	def __hash__(self) -> int:
 		return self.__str__().__hash__()
@@ -205,17 +204,5 @@ class Artifact(models.Model):
 		return super().__eq__(__value)
 	
 	def pts(self):
-		if self.pnt is None:
-			pts = self.pnt_est
-		else:
-			if self.pnt < 0:
-				pts = 0
-			if self.pnt == 0:
-				pts = self.pnt_est
-			else:
-				pts = self.pnt
-		
-		if not pts: return 0
-		fv = float(pts)
-		if fv < 0 : return 0
-		return fv
+		pts = self.pnt_est if not self.pnt else self.pnt
+		return 0 if not pts else pts
